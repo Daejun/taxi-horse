@@ -72,7 +72,7 @@ the list:
 
 ```
 taxi-horse@taxi-horse
-  Version: 0.1.0
+  Version: ...
   Scope: user
   Status: ✔ enabled
 ```
@@ -81,7 +81,7 @@ Claude Code keeps its copy of the plugin under `~/.claude/plugins/cache`.
 The script in that copy is what the later steps run:
 
 ```sh
-TAXI=$(ls -d ~/.claude/plugins/cache/taxi-horse/taxi-horse/*/taxi-horse | tail -n 1)
+TAXI=$(ls -dt ~/.claude/plugins/cache/taxi-horse/taxi-horse/*/taxi-horse | head -n 1)
 "$TAXI" --demo                    # prints 21 lines of coins and animals, exit 0
 ```
 
@@ -131,6 +131,18 @@ through that session's transcript.
 
 On screen the line is the row under the permission-mode line (`⏵⏵ ...`), or
 right under the input box when that line is not shown.
+
+## Update
+
+```sh
+claude plugin marketplace update taxi-horse
+claude plugin update taxi-horse@taxi-horse
+```
+
+The first fetches this repository again. The second installs the plugin
+again if `version` in `.claude-plugin/plugin.json` is higher than the
+installed one: a commit that leaves `version` alone does not reach an
+installed copy. `claude plugin list` then shows the new version.
 
 ## Install from a clone
 
