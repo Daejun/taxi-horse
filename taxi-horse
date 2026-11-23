@@ -1,0 +1,10 @@
+#!/usr/bin/python3 -IS
+# Launcher for the taxi_horse status line. meter.py is imported, not run, so
+# that Python reuses its compiled form: this runs once a second per session.
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import meter  # noqa: E402
+
+meter.cli()
