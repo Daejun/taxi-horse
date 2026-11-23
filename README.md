@@ -27,38 +27,42 @@ once a second.
 
 ## Install
 
-These steps are written so that a coding agent can follow them. Run them in
-order. Each step says what to expect.
+One command, from a shell:
 
-Tested with Claude Code 2.1.330 and Python 3.12.3 on Linux.
+```sh
+claude plugin install taxi-horse --marketplace Daejun/taxi-horse --scope user
+```
+
+or, typed at the prompt of a Claude Code session:
+
+```
+/plugin install taxi-horse --marketplace Daejun/taxi-horse
+```
+
+The steps below are the same install, written so that a coding agent can
+follow them. Run them in order. Each step says what to expect.
+
+Tested with Claude Code 2.1.330, Python 3.12.3 and git 2.43 on Linux.
 
 ### 0. Before you start
 
-- `REPO` below is the absolute path of this folder. Claude Code runs the
-  plugin from here: do not copy it elsewhere, and tell the user that moving
-  or deleting the folder removes the line.
 - Step 2 changes `~/.claude/settings.json`, which applies to every session
   of the user. If the user has not asked for that, ask first.
-- Nothing here needs the network or root.
+- Step 2 clones this repository from github.com over HTTPS. The repository
+  is public: no GitHub account is needed. Nothing here needs root.
 
 ### 1. Check the prerequisites
 
 ```sh
-REPO=/absolute/path/to/taxi_horse
 /usr/bin/python3 --version        # the launcher's shebang is /usr/bin/python3
 claude --version
-"$REPO/taxi-horse" --demo         # prints 21 lines of coins and animals, exit 0
+git --version
 ```
-
-If a coin or an animal shows as an empty box, the terminal has no colour
-emoji font with Unicode 13 (the coin is U+1FA99). Say so and go on: the
-install is the same.
 
 ### 2. Install the plugin
 
 ```sh
-claude plugin marketplace add "$REPO"
-claude plugin install taxi-horse@taxi-horse --scope user
+claude plugin install taxi-horse --marketplace Daejun/taxi-horse --scope user
 claude plugin list
 ```
 
@@ -68,9 +72,22 @@ the list:
 
 ```
 taxi-horse@taxi-horse
-  Read from: /absolute/path/to/taxi_horse
+  Version: 0.1.0
+  Scope: user
   Status: ✔ enabled
 ```
+
+Claude Code keeps its copy of the plugin under `~/.claude/plugins/cache`.
+The script in that copy is what the later steps run:
+
+```sh
+TAXI=$(ls -d ~/.claude/plugins/cache/taxi-horse/taxi-horse/*/taxi-horse | tail -n 1)
+"$TAXI" --demo                    # prints 21 lines of coins and animals, exit 0
+```
+
+If a coin or an animal shows as an empty box, the terminal has no colour
+emoji font with Unicode 13 (the coin is U+1FA99). Say so and go on: the
+install is the same.
 
 Sessions started after this show the line. A session that was already open
 shows it after `/reload-plugins`, typed by the user at its prompt, or after
@@ -82,7 +99,7 @@ way to run it" below.
 ### 3. Seed the speed history (optional)
 
 ```sh
-"$REPO/taxi-horse" --learn
+"$TAXI" --learn
 ```
 
 This reads the user's recent transcripts under `~/.claude/projects` and
@@ -96,7 +113,7 @@ What the mod runs, without touching any real state:
 
 ```sh
 D=$(mktemp -d)
-echo '{"session_id":"install-check"}' | XDG_RUNTIME_DIR="$D" XDG_STATE_HOME="$D" "$REPO/taxi-horse" --state
+echo '{"session_id":"install-check"}' | XDG_RUNTIME_DIR="$D" XDG_STATE_HOME="$D" "$TAXI" --state
 rm -r "$D"
 ```
 
@@ -114,6 +131,22 @@ through that session's transcript.
 
 On screen the line is the row under the permission-mode line (`⏵⏵ ...`), or
 right under the input box when that line is not shown.
+
+## Install from a clone
+
+To work on the plugin, let Claude Code run it from a clone instead of its
+own copy. Use this or the install above, not both: each names its
+marketplace `taxi-horse`.
+
+```sh
+git clone https://github.com/Daejun/taxi-horse
+claude plugin marketplace add "$PWD/taxi-horse"
+claude plugin install taxi-horse@taxi-horse --scope user
+```
+
+`claude plugin list` then shows `Read from:` and the clone's path. An edit
+shows in a session after `/reload-plugins`. Moving or deleting the clone
+removes the line. In steps 3 and 4, `TAXI` is `taxi-horse` in the clone.
 
 ## Uninstall
 
@@ -134,7 +167,7 @@ command:
 ```json
 "statusLine": {
   "type": "command",
-  "command": "/absolute/path/to/taxi_horse/taxi-horse",
+  "command": "/absolute/path/to/taxi-horse/taxi-horse",
   "refreshInterval": 1
 }
 ```
@@ -174,10 +207,12 @@ to that file: time, state, rate, level.
 
 ## Tests
 
+In a clone:
+
 ```sh
-cd "$REPO" && python3 -m unittest test_meter      # the script
-claude plugin test "$REPO"                        # the mod draws what the script draws
-claude plugin validate "$REPO"                    # the marketplace, the manifest, the mod's types
+python3 -m unittest test_meter    # the script
+claude plugin test .              # the mod draws what the script draws
+claude plugin validate .          # the marketplace, the manifest, the mod's types
 ```
 
 ## Troubleshooting
