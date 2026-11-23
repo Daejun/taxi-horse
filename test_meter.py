@@ -366,20 +366,6 @@ class MeterTest(unittest.TestCase):
 
     # ---- handing the drawing to the mod
 
-    def test_live_file_tells_the_mod_the_state_and_the_level(self):
-        os.makedirs(self.state)
-        meter.write_live(self.state, "sess", RUN, 7)
-        path = os.path.join(self.state, "sess.live")
-        def content():
-            with open(path) as f:
-                return f.read()
-        self.assertEqual(content(), "run 7")
-        before = os.stat(path).st_ino
-        meter.write_live(self.state, "sess", RUN, 7)
-        self.assertEqual(os.stat(path).st_ino, before, "unchanged content is not rewritten")
-        meter.write_live(self.state, "sess", VACANT, 0)
-        self.assertEqual(content(), "vacant 0")
-
     def test_script_stays_quiet_only_while_the_mod_is_alive(self):
         os.makedirs(self.state)
         self.assertFalse(meter.mod_draws(self.state, "sess", T0))
@@ -389,6 +375,27 @@ class MeterTest(unittest.TestCase):
         self.assertTrue(meter.mod_draws(self.state, "sess", T0 + 1))
         self.assertFalse(meter.mod_draws(self.state, "sess", T0 + meter.MOD_FRESH + 1))
         self.assertFalse(meter.mod_draws(self.state, "other", T0 + 1))
+
+    def run_cli(self, *args):
+        import subprocess
+        env = dict(os.environ, XDG_RUNTIME_DIR=self.dir, XDG_STATE_HOME=os.path.join(self.dir, "home-state"))
+        launcher = os.path.join(os.path.dirname(os.path.abspath(meter.__file__)), "taxi-horse")
+        return subprocess.run([launcher, *args], input=compact(self.data), env=env,
+                              capture_output=True, text=True)
+
+    def test_state_mode_answers_the_mod_with_state_and_level_and_draws_nothing(self):
+        now = datetime.now(timezone.utc).timestamp()
+        self.write(prompt(now - 2))
+        out = self.run_cli("--state")
+        self.assertEqual((out.returncode, out.stdout), (0, "run 0\n"))
+        self.write(assistant(now - 1, "m1", [0, 0, 0, 50], ["text"]))
+        out = self.run_cli("--state")
+        self.assertEqual(out.returncode, 0)
+        state, level = out.stdout.split()
+        self.assertEqual(state, VACANT)
+        self.assertIn(int(level), range(17))
+        drawn = self.run_cli()
+        self.assertIn("🐌💤", drawn.stdout, "without --state the same run draws the line")
 
     # ---- drawing
 
@@ -403,7 +410,7 @@ class MeterTest(unittest.TestCase):
         for g in animals:
             self.assertEqual((len(g), columns(g)), (1, 2), "one code point, two columns: " + g)
         self.assertEqual(meter.animal(99), "🦅")
-        for ph in (RUN, HALT, VACANT):
+        for ph in (RUN, HALT):
             self.assertIn(meter.animal(12), self.plain(ph, 12, 9.0))
 
     def test_line_is_only_coins_an_animal_and_its_zzz(self):
@@ -412,9 +419,9 @@ class MeterTest(unittest.TestCase):
             for lvl in (0, 5, 16):
                 for d in range(0, 90):
                     line = self.plain(ph, lvl, float(d))
-                    self.assertEqual(set(line) - animals - set(" 💤" + meter.COIN), set(), line)
+                    self.assertEqual(set(line) - animals - set(" 💤" + meter.COIN + meter.EATEN), set(), line)
                     self.assertEqual(sum(line.count(g) for g in animals), 1, line)
-        self.assertEqual(self.plain(RUN, 7, 9.0), self.plain(HALT, 7, 9.0), "nothing but the place tells them apart")
+        self.assertEqual(self.plain(RUN, 7, 9.0), self.plain(HALT, 7, 9.0), "nothing but the motion tells them apart")
         self.assertNotIn("\033", self.plain(RUN, 16, 9.0))
 
     def test_line_fits_the_track_and_has_no_trailing_blanks(self):
@@ -432,7 +439,8 @@ class MeterTest(unittest.TestCase):
         for ph in (RUN, HALT, VACANT):
             for lvl in (0, 7, 16):
                 for d in range(0, 90):
-                    self.assertIn(self.plain(ph, lvl, float(d))[0], (meter.COIN, meter.animal(lvl)))
+                    self.assertIn(self.plain(ph, lvl, float(d))[0],
+                                  (meter.COIN, meter.animal(0 if ph == VACANT else lvl)))
 
     def test_animal_runs_right_to_left_then_onto_the_last_coin(self):
         w = meter.TRACK
@@ -444,23 +452,43 @@ class MeterTest(unittest.TestCase):
         self.assertEqual(meter.animal_column(float(lap), w), w - 2)
         self.assertNotIn(1, {meter.animal_column(float(d), w) for d in range(300)})
 
-    def test_coins_ahead_of_the_animal_are_there_and_the_ones_behind_are_eaten(self):
+    def test_coins_ahead_of_the_animal_and_dollar_signs_where_it_has_eaten(self):
         w = meter.TRACK
         lap = meter.lap_length(w)
         spots = list(range(0, w - 4, meter.COIN_GAP))
         self.assertEqual(spots, [0, 8, 16, 24, 32])
         for ph in (RUN, HALT, VACANT):
-            self.assertEqual(self.plain(ph, 7, 0.0).count(meter.COIN), 5, "a full row at the start of a lap")
-            seen = []
+            start = self.plain(ph, 7, 0.0)
+            self.assertEqual((start.count(meter.COIN), start.count(meter.EATEN)), (5, 0),
+                             "a full row of coins at the start of a lap")
+            coins, eaten = [], []
             for d in range(lap):
                 line = self.plain(ph, 7, float(d))
                 x = meter.animal_column(float(d), w)
-                seen.append(line.count(meter.COIN))
-                self.assertEqual(seen[-1], sum(1 for c in spots if c + 1 < x), (ph, d, line))
-                self.assertNotIn(meter.COIN, line[line.index(meter.animal(7)):], "none behind the animal")
-            self.assertEqual(seen, sorted(seen, reverse=True), "only ever fewer within a lap")
-            self.assertEqual(seen[-1], 0, "the last one is eaten at the left end")
-        self.assertEqual(self.plain(RUN, 7, float(lap)).count(meter.COIN), 5, "a new row on the next lap")
+                here = line.index(meter.animal(0 if ph == VACANT else 7))
+                coins.append(line.count(meter.COIN))
+                eaten.append(line.count(meter.EATEN))
+                self.assertEqual(coins[-1], sum(1 for c in spots if c + 1 < x), (ph, d, line))
+                self.assertNotIn(meter.COIN, line[here:], "no coin behind the animal")
+                self.assertNotIn(meter.EATEN, line[:here], "no dollar sign ahead of it")
+                self.assertEqual(columns(line[:here]), x, "nothing has pushed the animal aside")
+                self.assertLessEqual(coins[-1] + eaten[-1], 5)
+            self.assertEqual(coins, sorted(coins, reverse=True), "only ever fewer coins within a lap")
+            self.assertEqual(coins[-1], 0, "the last one is eaten at the left end")
+            self.assertEqual(max(eaten), 4, "every coin but the last is seen as a dollar sign")
+        self.assertEqual(self.plain(RUN, 7, 23.0).count(meter.EATEN), 2, "the third is under the animal")
+        self.assertEqual(self.plain(RUN, 7, 25.0).count(meter.EATEN), 3)
+        again = self.plain(RUN, 7, float(lap))
+        self.assertEqual((again.count(meter.COIN), again.count(meter.EATEN)), (5, 0), "new coins on the next lap")
+
+    def test_dollar_sign_gives_way_to_the_animal_and_its_zzz(self):
+        w = meter.TRACK
+        for d in range(meter.lap_length(w)):
+            for ph in (RUN, HALT, VACANT):
+                line = self.plain(ph, 3, float(d))
+                self.assertEqual(sum(line.count(g) for _, g in meter.ANIMALS), 1, line)
+                if ph == VACANT:
+                    self.assertIn("🐌💤", line, "the zzz stays next to the animal: %r" % line)
 
     def test_every_lap_is_drawn_at_the_last_coin_whatever_the_redraw_interval(self):
         w = meter.TRACK
@@ -479,8 +507,11 @@ class MeterTest(unittest.TestCase):
             self.assertGreaterEqual(columns_seen.count(0), 3)
 
     def test_sleeping_animal_gets_its_zzz_only_between_turns(self):
-        self.assertIn("🐌💤", self.plain(VACANT, 0, 9.0))
-        self.assertIn(meter.animal(8) + "💤", self.plain(VACANT, 8, 9.0))
+        for lvl in range(meter.LEVEL_MAX + 1):
+            asleep = self.plain(VACANT, lvl, 9.0)
+            self.assertIn("🐌💤", asleep, "whatever it was, it sleeps as a snail")
+            self.assertEqual(asleep, self.plain(VACANT, 0, 9.0))
+        self.assertIn(meter.animal(8), self.plain(HALT, 8, 9.0), "standing, it stays what it was")
         self.assertNotIn("💤", self.plain(HALT, 0, 9.0))
         self.assertNotIn("💤", self.plain(RUN, 5, 9.0))
 

@@ -1,8 +1,16 @@
-"""taxi_horse: a Claude Code status line that shows token burn as a running animal.
+"""taxi_horse: shows how fast a Claude Code session burns tokens, as a running animal.
 
-Claude Code runs the launcher next to this file as the statusLine command: the
-session JSON arrives on stdin and the one line printed to stdout is drawn
-under the prompt.
+This is the counting half. There are two ways to run it.
+
+With the mod (the plugin this file ships in): the mod runs
+"taxi-horse --state" once a second, with the session id and the transcript
+path as JSON on stdin, gets back "<state> <level>" and draws the line itself,
+on a row of its own under the input box. It redraws as often as the animal
+moves a column, so the animal never jumps.
+
+As the statusLine command, without the mod: this script draws the line too,
+on the status line's row right under the input box. That row is redrawn once a
+second at most.
 
     "statusLine": {"type": "command", "command": "/path/to/taxi-horse",
                    "refreshInterval": 1}
@@ -10,12 +18,13 @@ under the prompt.
 The line is an animal and the coins it runs for: the tokens. No text, no
 number and no ground line.
     running    a request is out. The animal runs right to left and eats the
-               coins on its way. The faster tokens burn, the faster the animal:
+               coins on its way: an eaten coin turns into a dollar sign behind
+               it. The faster tokens burn, the faster the animal:
                one for each of the 17 speed levels, from a snail to an eagle.
                After the last coin, at the left end, it starts again from the
                right with new coins laid out.
     standing   only tools are running
-    asleep     between turns
+    asleep     between turns. Whatever it was, it sleeps as a snail.
 The animal stops, sleeps and starts again where it stands.
 
 The speed is the number of tokens the meter registered in the last WINDOW
@@ -38,19 +47,15 @@ not while it streams (on 2.1.330: about 0.2 s after its last content block,
 once 55 s later). The rate therefore counts tokens from the moment the meter
 sees them: every token shows up in the rate for exactly WINDOW seconds.
 
-The status line is redrawn once a second at most. The mod in mod/ redraws the
-same picture as often as the animal moves a column, so that it never jumps:
-this script then only does the counting. Each run it leaves the state and the
-speed level in <session>.live for the mod, and while the mod's <session>.mod
-file is fresh it prints nothing.
+With both the mod and the statusLine setting, the mod draws and this script
+prints nothing while the mod's <session>.mod file is fresh. Claude Code keeps
+the status line's row even when it is empty, so use one or the other.
 
-Install:
-    the statusLine setting above, in ~/.claude/settings.json
-    claude plugin marketplace add <this folder>
-    claude plugin install taxi-horse@taxi-horse
+Install: see README.md.
 
 Run by hand:
     taxi-horse --demo          draw every state
+    taxi-horse --state         what the mod runs: prints "<state> <level>"
     taxi-horse --levels        the speed at which each animal starts, for this user
     taxi-horse --learn         rebuild the history from recent transcripts
     taxi-horse < statusline.json
@@ -463,6 +468,7 @@ def advance(path, running, now, lap):
 # ---------------------------------------------------------------- drawing
 
 COIN = "🪙"
+EATEN = "💲"                         # what a coin turns into once the animal has passed it
 COIN_GAP = 8                         # a coin every so many columns, from the left end
 # The animal for each speed level, slowest first: (lowest level, glyph). All of
 # them face left in Noto Color Emoji and are one code point two columns wide.
@@ -500,18 +506,27 @@ def animal_column(dist, width=TRACK):
 
 
 def render(ph, lvl, dist, catching_up=False, width=None):
-    """The line: the coins still ahead of the animal, the animal, its zzz when asleep."""
+    """The line: coins ahead of the animal, dollar signs behind it, its zzz when asleep."""
     if width is None:
         width = track_width()
-    cells = [" "] * width
     x = animal_column(dist, width)
-    for c in range(0, width - 4, COIN_GAP):
-        if c + 1 < x:                        # still ahead of the animal: not eaten yet
-            cells[c:c + 2] = [COIN, ""]
-    cells[x:x + 2] = [animal(lvl), ""]
+    # Two-column glyphs by their left column. The animal and its zzz come first:
+    # a coin or a dollar sign they would overlap is left out.
+    glyphs = {x: animal(0 if ph == VACANT else lvl)}
     if ph == VACANT:
-        cells[x + 2:x + 4] = ["💤", ""]
-    line = "".join(cells).rstrip(" ")
+        glyphs[x + 2] = "💤"
+    for c in range(0, width - 4, COIN_GAP):
+        if not any(abs(c - taken) < 2 for taken in list(glyphs)):
+            glyphs[c] = COIN if c < x else EATEN
+    line, col = "", 0
+    while col < max(width, max(glyphs) + 2):
+        if col in glyphs:
+            line += glyphs[col]
+            col += 2
+        else:
+            line += " "
+            col += 1
+    line = line.rstrip(" ")
     if catching_up:              # still reading a long transcript for the first time
         line += " ..."
     return line
@@ -586,22 +601,6 @@ def measure(data, now, directory=None, budget=SCAN_BUDGET, rates=None):
 MOD_FRESH = 3.0          # seconds a mod's sign of life counts for
 
 
-def write_live(directory, session, ph, lvl):
-    """Leave the state and the speed level where the mod reads them."""
-    path = os.path.join(directory, session + ".live")
-    text = "%s %d" % (ph, lvl)
-    try:
-        with open(path) as f:
-            if f.read() == text:
-                return
-    except OSError:
-        pass
-    tmp = "%s.%d.tmp" % (path, os.getpid())
-    with open(tmp, "w") as f:
-        f.write(text)
-    os.replace(tmp, path)
-
-
 def mod_draws(directory, session, now):
     """Is the mod of this session alive and drawing the line itself."""
     try:
@@ -620,7 +619,7 @@ def demo():
     show(HALT, 7, 12.0, "<- standing: tools running")
     for lvl in range(LEVEL_MAX + 1):
         show(RUN, lvl, 13.0, "<- running, level %d" % lvl)
-    show(RUN, 7, 23.0, "<- three coins eaten")
+    show(RUN, 7, 25.0, "<- three coins eaten: dollar signs behind it")
     show(RUN, 7, lap_length() - 1.0, "<- at the left end: the last coin is eaten")
 
 
@@ -648,8 +647,9 @@ def main():
     directory = state_dir()
     session = os.path.basename(str(data.get("session_id") or "unknown"))
     ph, _tok_s, _counted, catching_up, dist, lvl = measure(data, now, directory)
-    write_live(directory, session, ph, lvl)
-    if not mod_draws(directory, session, now):
+    if "--state" in sys.argv:
+        print("%s %d" % (ph, lvl))
+    elif not mod_draws(directory, session, now):
         print(render(ph, lvl, dist, catching_up))
 
 

@@ -1,5 +1,12 @@
 {
   "name": "taxi-horse",
-  "owner": { "name": "Daejun" },
-  "plugins": [{ "name": "taxi-horse", "source": "./mod" }]
+  "description": "taxi-horse plugin for Claude Code",
+  "owner": { "name": "Daejun", "url": "https://github.com/Daejun" },
+  "plugins": [
+    {
+      "name": "taxi-horse",
+      "source": "./",
+      "description": "An animal under the prompt that runs faster the faster a session burns tokens"
+    }
+  ]
 }

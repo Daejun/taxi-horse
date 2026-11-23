@@ -1,5 +1,0 @@
-{
-  "name": "taxi-horse",
-  "version": "0.1.0",
-  "description": "Draws the taxi_horse line under the prompt: an animal that runs faster and is redrawn more often the faster tokens burn."
-}
