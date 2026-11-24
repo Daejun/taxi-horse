@@ -1476,6 +1476,7 @@ test('reads what meter.py leaves and refuses anything else', async () => {
   expect(parseLive('run 7 gust\n')).toEqual({ phase: 'run', level: 7, mark: 'gust' })
   expect(parseLive('run 16 fire\n')).toEqual({ phase: 'run', level: 16, mark: 'fire' })
   expect(parseLive('halt 3 doze\n')).toEqual({ phase: 'halt', level: 3, mark: 'doze' })
+  expect(parseLive('vacant 0 home\n')).toEqual({ phase: 'vacant', level: 0, mark: 'home' })
   expect(parseLive('run 7 sparkle')).toEqual({ phase: 'run', level: 7, mark: '' })
   expect(parseLive('')).toBeUndefined()
   expect(parseLive('gallop 3')).toBeUndefined()
@@ -1759,12 +1760,98 @@ const MARKED: readonly (readonly [Phase, number, number, Mark, string])[] = [
   ['vacant', 16, 38, 'doze', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
   ['vacant', 16, 39, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
   ['vacant', 16, 77, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 0, 0, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['vacant', 0, 1, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['vacant', 0, 5, 'home', '🪙      🪙      🪙      🪙       🏠💤'],
+  ['vacant', 0, 6, 'home', '🪙      🪙      🪙      🪙      🏠💤'],
+  ['vacant', 0, 7, 'home', '🪙      🪙      🪙      🪙     🏠💤'],
+  ['vacant', 0, 13, 'home', '🪙      🪙      🪙       🏠💤   💲'],
+  ['vacant', 0, 14, 'home', '🪙      🪙      🪙      🏠💤    💲'],
+  ['vacant', 0, 22, 'home', '🪙      🪙      🏠💤    💲      💲'],
+  ['vacant', 0, 30, 'home', '🪙      🏠💤    💲      💲      💲'],
+  ['vacant', 0, 36, 'home', '🪙🏠💤  💲      💲      💲      💲'],
+  ['vacant', 0, 37, 'home', '🏠💤    💲      💲      💲      💲'],
+  ['vacant', 0, 38, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['vacant', 0, 39, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['vacant', 0, 77, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['vacant', 7, 0, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['vacant', 7, 1, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['vacant', 7, 5, 'home', '🪙      🪙      🪙      🪙       🏠💤'],
+  ['vacant', 7, 6, 'home', '🪙      🪙      🪙      🪙      🏠💤'],
+  ['vacant', 7, 7, 'home', '🪙      🪙      🪙      🪙     🏠💤'],
+  ['vacant', 7, 13, 'home', '🪙      🪙      🪙       🏠💤   💲'],
+  ['vacant', 7, 14, 'home', '🪙      🪙      🪙      🏠💤    💲'],
+  ['vacant', 7, 22, 'home', '🪙      🪙      🏠💤    💲      💲'],
+  ['vacant', 7, 30, 'home', '🪙      🏠💤    💲      💲      💲'],
+  ['vacant', 7, 36, 'home', '🪙🏠💤  💲      💲      💲      💲'],
+  ['vacant', 7, 37, 'home', '🏠💤    💲      💲      💲      💲'],
+  ['vacant', 7, 38, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['vacant', 7, 39, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['vacant', 7, 77, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['vacant', 16, 0, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['vacant', 16, 1, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['vacant', 16, 5, 'home', '🪙      🪙      🪙      🪙       🏠💤'],
+  ['vacant', 16, 6, 'home', '🪙      🪙      🪙      🪙      🏠💤'],
+  ['vacant', 16, 7, 'home', '🪙      🪙      🪙      🪙     🏠💤'],
+  ['vacant', 16, 13, 'home', '🪙      🪙      🪙       🏠💤   💲'],
+  ['vacant', 16, 14, 'home', '🪙      🪙      🪙      🏠💤    💲'],
+  ['vacant', 16, 22, 'home', '🪙      🪙      🏠💤    💲      💲'],
+  ['vacant', 16, 30, 'home', '🪙      🏠💤    💲      💲      💲'],
+  ['vacant', 16, 36, 'home', '🪙🏠💤  💲      💲      💲      💲'],
+  ['vacant', 16, 37, 'home', '🏠💤    💲      💲      💲      💲'],
+  ['vacant', 16, 38, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['vacant', 16, 39, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['vacant', 16, 77, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['halt', 0, 0, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['halt', 0, 1, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['halt', 0, 5, 'home', '🪙      🪙      🪙      🪙       🏠💤'],
+  ['halt', 0, 6, 'home', '🪙      🪙      🪙      🪙      🏠💤'],
+  ['halt', 0, 7, 'home', '🪙      🪙      🪙      🪙     🏠💤'],
+  ['halt', 0, 13, 'home', '🪙      🪙      🪙       🏠💤   💲'],
+  ['halt', 0, 14, 'home', '🪙      🪙      🪙      🏠💤    💲'],
+  ['halt', 0, 22, 'home', '🪙      🪙      🏠💤    💲      💲'],
+  ['halt', 0, 30, 'home', '🪙      🏠💤    💲      💲      💲'],
+  ['halt', 0, 36, 'home', '🪙🏠💤  💲      💲      💲      💲'],
+  ['halt', 0, 37, 'home', '🏠💤    💲      💲      💲      💲'],
+  ['halt', 0, 38, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['halt', 0, 39, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['halt', 0, 77, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['halt', 7, 0, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['halt', 7, 1, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['halt', 7, 5, 'home', '🪙      🪙      🪙      🪙       🏠💤'],
+  ['halt', 7, 6, 'home', '🪙      🪙      🪙      🪙      🏠💤'],
+  ['halt', 7, 7, 'home', '🪙      🪙      🪙      🪙     🏠💤'],
+  ['halt', 7, 13, 'home', '🪙      🪙      🪙       🏠💤   💲'],
+  ['halt', 7, 14, 'home', '🪙      🪙      🪙      🏠💤    💲'],
+  ['halt', 7, 22, 'home', '🪙      🪙      🏠💤    💲      💲'],
+  ['halt', 7, 30, 'home', '🪙      🏠💤    💲      💲      💲'],
+  ['halt', 7, 36, 'home', '🪙🏠💤  💲      💲      💲      💲'],
+  ['halt', 7, 37, 'home', '🏠💤    💲      💲      💲      💲'],
+  ['halt', 7, 38, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['halt', 7, 39, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['halt', 7, 77, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['halt', 16, 0, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['halt', 16, 1, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['halt', 16, 5, 'home', '🪙      🪙      🪙      🪙       🏠💤'],
+  ['halt', 16, 6, 'home', '🪙      🪙      🪙      🪙      🏠💤'],
+  ['halt', 16, 7, 'home', '🪙      🪙      🪙      🪙     🏠💤'],
+  ['halt', 16, 13, 'home', '🪙      🪙      🪙       🏠💤   💲'],
+  ['halt', 16, 14, 'home', '🪙      🪙      🪙      🏠💤    💲'],
+  ['halt', 16, 22, 'home', '🪙      🪙      🏠💤    💲      💲'],
+  ['halt', 16, 30, 'home', '🪙      🏠💤    💲      💲      💲'],
+  ['halt', 16, 36, 'home', '🪙🏠💤  💲      💲      💲      💲'],
+  ['halt', 16, 37, 'home', '🏠💤    💲      💲      💲      💲'],
+  ['halt', 16, 38, 'home', '🪙      🪙      🪙      🪙      🪙    🏠💤'],
+  ['halt', 16, 39, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
+  ['halt', 16, 77, 'home', '🪙      🪙      🪙      🪙      🪙   🏠💤'],
 ]
 
-test('draws wind, fire and zzz behind the animal as meter.py does', async () => {
+test('draws wind, fire, zzz and the house as meter.py does', async () => {
   for (const [phase, level, dist, mark, line] of MARKED) {
     expect(render(phase, level, dist, mark)).toBe(line)
   }
+  expect(render('vacant', 9, 13, 'home')).toContain('🏠💤')
+  expect(render('halt', 9, 13, 'home')).not.toContain(animal(9))
   expect(render('run', 7, 13, 'gust')).toContain('🐘💨')
   expect(render('run', 7, 13, 'fire')).toContain('🐘🔥')
   expect(render('halt', 7, 13, 'doze')).toContain('🐘💤')
@@ -1786,15 +1873,19 @@ test('draws a poof in place of an animal that is changing', async () => {
 test('poofs when the animal changes or wakes up, not when it falls asleep', async () => {
   expect(poofs(undefined, 'run', 7)).toBe(false)
   // Another animal while awake, whether it runs or stands.
-  expect(poofs({ phase: 'run', level: 7 }, 'run', 8)).toBe(true)
-  expect(poofs({ phase: 'run', level: 7 }, 'halt', 6)).toBe(true)
-  expect(poofs({ phase: 'run', level: 7 }, 'halt', 7)).toBe(false)
-  expect(poofs({ phase: 'halt', level: 7 }, 'run', 7)).toBe(false)
-  // Waking up, even as the snail it slept as.
-  expect(poofs({ phase: 'vacant', level: 0 }, 'run', 0)).toBe(true)
-  expect(poofs({ phase: 'vacant', level: 9 }, 'run', 9)).toBe(true)
-  // Falling asleep, and whatever happens to the speed while asleep.
-  expect(poofs({ phase: 'run', level: 7 }, 'vacant', 7)).toBe(false)
-  expect(poofs({ phase: 'halt', level: 7 }, 'vacant', 0)).toBe(false)
-  expect(poofs({ phase: 'vacant', level: 7 }, 'vacant', 3)).toBe(false)
+  expect(poofs({ phase: 'run', level: 7, mark: '' }, 'run', 8)).toBe(true)
+  expect(poofs({ phase: 'run', level: 7, mark: 'gust' }, 'halt', 6)).toBe(true)
+  expect(poofs({ phase: 'run', level: 7, mark: '' }, 'halt', 7)).toBe(false)
+  expect(poofs({ phase: 'halt', level: 7, mark: 'doze' }, 'run', 7)).toBe(false)
+  // Waking up, even as the snail it slept as, and coming out of the house.
+  expect(poofs({ phase: 'vacant', level: 0, mark: '' }, 'run', 0)).toBe(true)
+  expect(poofs({ phase: 'vacant', level: 9, mark: '' }, 'run', 9)).toBe(true)
+  expect(poofs({ phase: 'vacant', level: 0, mark: 'home' }, 'run', 0)).toBe(true)
+  expect(poofs({ phase: 'halt', level: 0, mark: 'home' }, 'run', 0)).toBe(true)
+  // Falling asleep, going home, and whatever happens to the speed meanwhile.
+  expect(poofs({ phase: 'run', level: 7, mark: '' }, 'vacant', 7)).toBe(false)
+  expect(poofs({ phase: 'halt', level: 7, mark: '' }, 'vacant', 0)).toBe(false)
+  expect(poofs({ phase: 'vacant', level: 7, mark: '' }, 'vacant', 3)).toBe(false)
+  expect(poofs({ phase: 'vacant', level: 3, mark: '' }, 'vacant', 0, 'home')).toBe(false)
+  expect(poofs({ phase: 'halt', level: 3, mark: 'doze' }, 'halt', 0, 'home')).toBe(false)
 })

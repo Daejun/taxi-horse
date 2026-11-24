@@ -13,6 +13,9 @@ running under the input box.
 
 - The animal runs right to left while a request is out, stands while tools
   run and sleeps between turns, always as a snail (`🐌💤`).
+- When the average speed is 0 too, two minutes after the last token, and
+  no request is out, it goes into its house to sleep (`🏠💤`). A session
+  that has not started yet is at home as well.
 - It eats the coins on its way: an eaten coin turns into `💲` behind it.
   After the last coin it starts again from the right.
 - The kind of animal is the speed, averaged over two minutes: 17 of them,
@@ -23,7 +26,7 @@ running under the input box.
   more. Fire (`🐎🔥`): the same, and to 3 times the speed the fastest animal
   starts at. Zzz (`🐎💤`): it stands, and no token has come for 10 seconds.
 - When the animal changes into another, or wakes up, a poof (`💥`) stands
-  in its place for a moment. Falling asleep has none.
+  in its place for a moment. Falling asleep and going home have none.
 - The faster it runs, the more often it is redrawn, one column at a time.
 - There is no text and no number on the line.
 
@@ -95,7 +98,7 @@ with the `python3` that is first on `PATH`:
 
 ```sh
 TAXI=$(ls -dt ~/.claude/plugins/cache/taxi-horse/taxi-horse/*/taxi-horse | head -n 1)
-"$TAXI" --demo                    # prints 24 lines of coins and animals, exit 0
+"$TAXI" --demo                    # prints 25 lines of coins and animals, exit 0
 ```
 
 If a coin or an animal shows as an empty box, the terminal has no colour
@@ -130,7 +133,8 @@ echo '{"session_id":"install-check"}' | XDG_RUNTIME_DIR="$D" XDG_STATE_HOME="$D"
 rm -r "$D"
 ```
 
-It prints `vacant 0`: no turn is running, speed level 0. Exit status 0.
+It prints `vacant 0 home`: no turn is running, speed level 0, and the animal
+is at home. Exit status 0.
 
 In a session started after step 1, once it has run for a few seconds:
 
@@ -220,7 +224,7 @@ It makes no network requests.
 
 | Command | What it does |
 | --- | --- |
-| `taxi-horse --state` | what the mod runs: prints `<state> <level>` for the session on stdin, and `gust`, `fire` or `doze` after them when that goes behind the animal |
+| `taxi-horse --state` | what the mod runs: prints `<state> <level>` for the session on stdin, and `gust`, `fire`, `doze` or `home` after them when the animal has that mark |
 | `taxi-horse` | as the `statusLine` command: prints the line |
 | `taxi-horse --demo` | draws every state and every animal |
 | `taxi-horse --levels` | the speed at which each animal starts, for this user |
@@ -248,8 +252,9 @@ claude plugin validate .          # the marketplace, the manifest, the mod's typ
   and the text is the reason. `taxi-horse needs Python 3.7 or newer: ...`
   means no Python was found, or only an older one. Any other text is the
   last line of the script's error: run the step 3 check to see all of it.
-- No line in any session: run the step 3 check. Anything but `vacant 0`
-  and exit 0 is the script failing; its traceback is on stderr.
+- No line in any session: run the step 3 check. Anything but
+  `vacant 0 home` and exit 0 is the script failing; its traceback is on
+  stderr.
 - An empty row under the input box: taxi-horse is also set as `statusLine`.
   Remove that setting.
 - A coin or an animal is an empty box: the font lacks that emoji.

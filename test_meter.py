@@ -415,6 +415,11 @@ class MeterTest(unittest.TestCase):
         out = self.run_cli("--state")
         self.assertEqual((out.returncode, out.stdout), (0, "halt 0 doze\n"))
 
+    def test_state_mode_says_home_for_a_session_with_nothing_yet(self):
+        self.data = {"session_id": "fresh"}
+        out = self.run_cli("--state")
+        self.assertEqual((out.returncode, out.stdout), (0, "vacant 0 home\n"))
+
     def test_every_level_has_its_own_animal_and_none_is_a_dragon(self):
         animals = [meter.animal(n) for n in range(meter.LEVEL_MAX + 1)]
         self.assertEqual("".join(animals), "🐌🐢🦔🐁🐓🐖🐑🐘🐪🐕🐇🦘🦌🐎🐅🐆🦅")
@@ -579,6 +584,32 @@ class MeterTest(unittest.TestCase):
         self.assertEqual(self.run_mark(T0 + 100), (RUN, ""), "no zzz while a request is out, however long it takes")
         self.write(assistant(T0 + 101, "m2", [0, 0, 0, 10], ["text"]))
         self.assertEqual(self.run_mark(T0 + 102), (VACANT, ""), "between turns the picture has its own zzz")
+
+    def test_animal_goes_home_when_the_average_is_zero_too(self):
+        self.assertEqual(self.run_mark(T0), (VACANT, meter.HOME), "a session that has not started is at home")
+        self.write(prompt(T0 + 1))
+        self.assertEqual(self.run_mark(T0 + 2), (RUN, ""), "a request is out: it is up, even at speed 0")
+        self.write(assistant(T0 + 3, "m1", [0, 0, 0, 3000], ["tool_use"]))
+        self.assertEqual(self.run_mark(T0 + 4), (HALT, ""))
+        self.assertEqual(self.run_mark(T0 + 4 + W - 1), (HALT, meter.DOZE), "the average still has the tokens")
+        self.assertEqual(self.run_mark(T0 + 4 + W), (HALT, meter.HOME), "a tool that runs on and on")
+        self.write(tool_result(T0 + 4 + W + 1), assistant(T0 + 4 + W + 2, "m2", [0, 0, 0, 3000], ["text"]))
+        end = T0 + 4 + W + 3
+        self.assertEqual(self.run_mark(end), (VACANT, ""), "the turn is over: asleep outside, as a snail")
+        self.assertEqual(self.run_mark(end + W - 1), (VACANT, ""))
+        self.assertEqual(self.run_mark(end + W), (VACANT, meter.HOME), "two minutes after the last token")
+
+    def test_house_stands_in_place_of_the_animal_with_its_zzz(self):
+        animals = {g for _, g in meter.ANIMALS}
+        for ph in (VACANT, HALT):
+            for lvl in (0, 7):
+                for d in range(0, 90):
+                    line = self.plain(ph, lvl, float(d), mark=meter.HOME)
+                    self.assertEqual(line.count(meter.HOUSE + "💤"), 1, line)
+                    self.assertEqual(set(line) & animals, set(), line)
+                    self.assertEqual(line.index(meter.HOUSE), self.plain(ph, lvl, float(d)).index(meter.animal(0 if ph == VACANT else lvl)),
+                                     "where the animal stood")
+                    self.assertLessEqual(columns(line), meter.TRACK + 2, line)
 
     def test_mark_is_drawn_right_behind_the_animal(self):
         a = meter.animal(7)

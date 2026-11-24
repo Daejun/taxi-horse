@@ -5,7 +5,7 @@ import type { Register } from 'claude-code'
 //
 // meter.py counts the tokens. Once a second this mod runs "taxi-horse --state"
 // with the session id and the transcript path, and gets back "<state> <level>"
-// and, when something goes behind the animal, "gust", "fire" or "doze".
+// and, when the animal has a mark, "gust", "fire", "doze" or "home".
 // It finds the Python to run it with by itself, and when there is none the row
 // says so: a plugin has nothing that runs when it is installed, so this is
 // where a missing prerequisite shows.
@@ -20,7 +20,7 @@ import type { Register } from 'claude-code'
 //
 // The picture is meter.py's render(): keep the two the same. One thing is this
 // mod's alone: when the animal changes into another, or wakes up, a poof is
-// drawn in its place for POOF_MS. Falling asleep has none. A status line,
+// drawn in its place for POOF_MS. Falling asleep and going home have none. A status line,
 // redrawn once a second, has no frame that short.
 
 const TRACK = 40
@@ -31,8 +31,12 @@ const COIN_GAP = 8
 // One animal for each speed level, 0 to 16, slowest first.
 const ANIMALS: readonly string[] = [...'🐌🐢🦔🐁🐓🐖🐑🐘🐪🐕🐇🦘🦌🐎🐅🐆🦅']
 // What a mark draws right behind the animal: wind when it has just sped up,
-// fire when that is to a great speed, zzz when it has just stopped.
-const BEHIND = { gust: '💨', fire: '🔥', doze: '💤' } as const
+// fire when that is to a great speed, zzz when it has just stopped, and zzz
+// again when it is at home.
+const BEHIND = { gust: '💨', fire: '🔥', doze: '💤', home: '💤' } as const
+// What stands in place of an animal that is at home: no request is out and
+// the average speed is 0 too.
+const HOUSE = '🏠'
 // What is drawn in place of the animal while it changes into another or wakes
 // up.
 const POOF = '💥'
@@ -78,19 +82,25 @@ export function animalShown(phase: Phase, level: number): string {
   return animal(phase === 'vacant' ? 0 : level)
 }
 
+// Asleep: between turns, or at home.
+export function isAsleep(phase: Phase, mark: Mark): boolean {
+  return phase === 'vacant' || mark === 'home'
+}
+
 // Does going from what was drawn to this state take a poof: waking up, and
-// changing into another animal while awake. Falling asleep does not, and
-// neither does the first picture.
+// changing into another animal while awake. Falling asleep and going home do
+// not, and neither does the first picture.
 export function poofs(
-  before: { phase: Phase; level: number } | undefined,
+  before: { phase: Phase; level: number; mark: Mark } | undefined,
   phase: Phase,
   level: number,
+  mark: Mark = '',
 ): boolean {
-  if (before === undefined || phase === 'vacant') {
+  if (before === undefined || isAsleep(phase, mark)) {
     return false
   }
 
-  return before.phase === 'vacant' || animal(before.level) !== animal(level)
+  return isAsleep(before.phase, before.mark) || animal(before.level) !== animal(level)
 }
 
 export function render(
@@ -105,7 +115,8 @@ export function render(
   // Two-column glyphs by their left column. The animal and what is right
   // behind it come first: a coin or a dollar sign they would overlap is left
   // out. While the animal changes there is only the poof.
-  const glyphs = new Map<number, string>([[x, isChanging ? POOF : animalShown(phase, level)]])
+  const standing = mark === 'home' ? HOUSE : animalShown(phase, level)
+  const glyphs = new Map<number, string>([[x, isChanging ? POOF : standing]])
   const behind = phase === 'vacant' ? '💤' : mark === '' ? undefined : BEHIND[mark]
   if (behind !== undefined && !isChanging) {
     glyphs.set(x + 2, behind)
@@ -135,7 +146,9 @@ export function parseLive(text: string): { phase: Phase; level: number; mark: Ma
   }
 
   // A mark this copy does not know is left out, not refused.
-  return { phase, level: n, mark: mark === 'gust' || mark === 'fire' || mark === 'doze' ? mark : '' }
+  const known = mark === 'gust' || mark === 'fire' || mark === 'doze' || mark === 'home'
+
+  return { phase, level: n, mark: known ? mark : '' }
 }
 
 // Runs a program and resolves with what it wrote and its exit status; rejects
@@ -222,7 +235,7 @@ export const register: Register = on => {
     // When the animal may move its next column, the state last drawn, and
     // until when the poof of its change stays.
     let stepAt = 0
-    let drawn: { phase: Phase; level: number } | undefined
+    let drawn: { phase: Phase; level: number; mark: Mark } | undefined
     let poofUntil = 0
     let polledAt = 0
     let isDrawing = false
@@ -324,13 +337,13 @@ export const register: Register = on => {
           wait = stepAt - now
         }
         if (isDrawing) {
-          if (poofs(drawn, phase, level)) {
+          if (poofs(drawn, phase, level, mark)) {
             poofUntil = now + POOF_MS
           }
-          drawn = { phase, level }
+          drawn = { phase, level, mark }
         }
         // Falling asleep cuts a poof short.
-        const isChanging = isDrawing && phase !== 'vacant' && now < poofUntil
+        const isChanging = isDrawing && !isAsleep(phase, mark) && now < poofUntil
         if (isChanging) {
           wait = Math.min(wait, poofUntil - now)
         }

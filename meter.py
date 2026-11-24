@@ -5,7 +5,7 @@ This is the counting half. There are two ways to run it.
 With the mod (the plugin this file ships in): the mod runs
 "taxi-horse --state" once a second, with the session id and the transcript
 path as JSON on stdin, gets back "<state> <level>", with a third word when
-something goes behind the animal ("gust", "fire" or "doze"), and draws the
+the animal has a mark ("gust", "fire", "doze" or "home"), and draws the
 line itself, on a row of its own under the input box. It redraws as often as the animal
 moves a column, so the animal never jumps.
 
@@ -39,6 +39,10 @@ moment, the last GUST_WINDOW seconds, against that average:
 While a request is out there is no zzz, however long it takes: the tokens of
 a response only show when it is complete (see below).
 
+When the average is 0 too, no token for WINDOW seconds, and no request is
+out, the animal goes into its house to sleep: a house stands in its place,
+with its zzz. A session that has not started yet is at home as well.
+
 The speed is the number of tokens the meter registered in the last WINDOW
 seconds, per second. The tokens counted are input + cache write + output
 tokens. Cache reads are left out: they repeat the whole context on every
@@ -68,7 +72,7 @@ Install: see README.md.
 Run by hand:
     taxi-horse --demo          draw every state
     taxi-horse --state         what the mod runs: prints "<state> <level>", and
-                               "gust", "fire" or "doze" after them
+                               "gust", "fire", "doze" or "home" after them
     taxi-horse --levels        the speed at which each animal starts, for this user
     taxi-horse --learn         rebuild the history from recent transcripts
     taxi-horse < statusline.json
@@ -407,7 +411,7 @@ def level_starts(hist=None):
     return starts
 
 
-GUST, FIRE, DOZE = "gust", "fire", "doze"
+GUST, FIRE, DOZE, HOME = "gust", "fire", "doze", "home"
 
 
 def mark(st, now, ph, tok_s, hist=None):
@@ -417,12 +421,14 @@ def mark(st, now, ph, tok_s, hist=None):
     times the average or more, and fast enough to be more than a snail. FIRE
     when that is also FIRE_FACTOR times the speed the fastest animal starts at.
     DOZE while standing, when no token was registered for DOZE_AFTER seconds.
-    Otherwise "".
+    HOME when no request is out and the average is 0 too. Otherwise "".
     """
     if ph == RUN:
         fast = rate(st, now, GUST_WINDOW)
         if fast > 0 and fast >= GUST_FACTOR * tok_s and level(fast, hist) >= 1:
             return FIRE if fast >= FIRE_FACTOR * level_starts(hist)[-1] else GUST
+    elif tok_s <= 0:
+        return HOME
     elif ph == HALT:
         if not any(now - DOZE_AFTER < e[0] <= now for e in st["ev"]):
             return DOZE
@@ -515,7 +521,8 @@ COIN_GAP = 8                         # a coin every so many columns, from the le
 # rabbit, kangaroo, deer, horse, tiger, leopard, eagle. With the rates of 150
 # recent sessions the median is the elephant and the 94th percentile the deer.
 ANIMALS = tuple(enumerate("🐌🐢🦔🐁🐓🐖🐑🐘🐪🐕🐇🦘🦌🐎🐅🐆🦅"))
-BEHIND = {GUST: "💨", FIRE: "🔥", DOZE: "💤"}      # what a mark draws behind the animal
+BEHIND = {GUST: "💨", FIRE: "🔥", DOZE: "💤", HOME: "💤"}      # what a mark draws behind the animal
+HOUSE = "🏠"                         # what stands in place of an animal that is at home
 
 
 def animal(lvl):
@@ -547,14 +554,15 @@ def animal_column(dist, width=TRACK):
 
 def render(ph, lvl, dist, catching_up=False, width=None, mark=""):
     """The line: coins ahead of the animal, dollar signs behind it, and right
-    behind it its zzz when asleep, or the wind, fire or zzz of its mark."""
+    behind it its zzz when asleep, or the wind, fire or zzz of its mark. At
+    home, its house stands in its place."""
     if width is None:
         width = track_width()
     x = animal_column(dist, width)
     # Two-column glyphs by their left column. The animal and what is right
     # behind it come first: a coin or a dollar sign they would overlap is left
     # out.
-    glyphs = {x: animal(0 if ph == VACANT else lvl)}
+    glyphs = {x: HOUSE if mark == HOME else animal(0 if ph == VACANT else lvl)}
     behind = "💤" if ph == VACANT else BEHIND.get(mark)
     if behind:
         glyphs[x + 2] = behind
@@ -661,6 +669,7 @@ def demo():
         pad = TRACK + 4 - sum(1 + (ord(ch) > 0x1F000) for ch in line)
         print(line + " " * pad, note)
 
+    show(VACANT, 0, 12.0, "<- at home: asleep, and the average is 0 too", HOME)
     show(VACANT, 0, 12.0, "<- asleep: between turns")
     show(HALT, 7, 12.0, "<- standing: tools running")
     show(HALT, 7, 12.0, "<- dozing: standing, and no token for a while", DOZE)
