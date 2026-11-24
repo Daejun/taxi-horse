@@ -4,7 +4,8 @@ import type { Register } from 'claude-code'
 // the input box.
 //
 // meter.py counts the tokens. Once a second this mod runs "taxi-horse --state"
-// with the session id and the transcript path, and gets back "<state> <level>".
+// with the session id and the transcript path, and gets back "<state> <level>"
+// and, when something goes behind the animal, "gust", "fire" or "doze".
 // It finds the Python to run it with by itself, and when there is none the row
 // says so: a plugin has nothing that runs when it is installed, so this is
 // where a missing prerequisite shows.
@@ -17,7 +18,10 @@ import type { Register } from 'claude-code'
 // permission-mode line, which no mod can draw above. $.ui.status would pin the
 // line as a notice instead, which the terminal marks with a "!".
 //
-// The picture is meter.py's render(): keep the two the same.
+// The picture is meter.py's render(): keep the two the same. One thing is this
+// mod's alone: when the animal changes into another, a poof is drawn in its
+// place for POOF_MS. A status line, redrawn once a second, has no frame that
+// short.
 
 const TRACK = 40
 const COIN = '🪙'
@@ -26,6 +30,14 @@ const EATEN = '💲'
 const COIN_GAP = 8
 // One animal for each speed level, 0 to 16, slowest first.
 const ANIMALS: readonly string[] = [...'🐌🐢🦔🐁🐓🐖🐑🐘🐪🐕🐇🦘🦌🐎🐅🐆🦅']
+// What a mark draws right behind the animal: wind when it has just sped up,
+// fire when that is to a great speed, zzz when it has just stopped.
+const BEHIND = { gust: '💨', fire: '🔥', doze: '💤' } as const
+// What is drawn in place of the animal while it changes into another.
+const POOF = '💥'
+const POOF_MS = 400
+// The shortest wait between two redraws.
+const MIN_WAIT_MS = 20
 const POLL_MS = 1000
 const IDLE_MS = 1000
 // How long a sign of life of another copy of this mod counts for.
@@ -44,6 +56,7 @@ const RETRY_MS = 30000
 const FAILURES_SHOWN = 3
 
 export type Phase = 'run' | 'halt' | 'vacant'
+export type Mark = '' | keyof typeof BEHIND
 
 export function animal(level: number): string {
   const index = Math.min(ANIMALS.length - 1, Math.max(0, Math.floor(level)))
@@ -59,19 +72,27 @@ export function animalColumn(dist: number, width: number = TRACK): number {
   return pos === lap - 1 ? 0 : width - 2 - pos
 }
 
+// The animal drawn for a state: whatever it was, it sleeps as a snail.
+export function animalShown(phase: Phase, level: number): string {
+  return animal(phase === 'vacant' ? 0 : level)
+}
+
 export function render(
   phase: Phase,
   level: number,
   dist: number,
+  mark: Mark = '',
   width: number = TRACK,
+  isChanging: boolean = false,
 ): string {
   const x = animalColumn(dist, width)
-  // Two-column glyphs by their left column. The animal and its zzz come first:
-  // a coin or a dollar sign they would overlap is left out. Whatever it was,
-  // the animal sleeps as a snail.
-  const glyphs = new Map<number, string>([[x, animal(phase === 'vacant' ? 0 : level)]])
-  if (phase === 'vacant') {
-    glyphs.set(x + 2, '💤')
+  // Two-column glyphs by their left column. The animal and what is right
+  // behind it come first: a coin or a dollar sign they would overlap is left
+  // out. While the animal changes there is only the poof.
+  const glyphs = new Map<number, string>([[x, isChanging ? POOF : animalShown(phase, level)]])
+  const behind = phase === 'vacant' ? '💤' : mark === '' ? undefined : BEHIND[mark]
+  if (behind !== undefined && !isChanging) {
+    glyphs.set(x + 2, behind)
   }
   const taken = [...glyphs.keys()]
   for (let c = 0; c < width - 4; c += COIN_GAP) {
@@ -90,14 +111,15 @@ export function render(
   return line.replace(/ +$/, '')
 }
 
-export function parseLive(text: string): { phase: Phase; level: number } | undefined {
-  const [phase, level] = text.trim().split(' ')
+export function parseLive(text: string): { phase: Phase; level: number; mark: Mark } | undefined {
+  const [phase, level, mark] = text.trim().split(' ')
   const n = Number(level)
   if ((phase !== 'run' && phase !== 'halt' && phase !== 'vacant') || !Number.isInteger(n)) {
     return undefined
   }
 
-  return { phase, level: n }
+  // A mark this copy does not know is left out, not refused.
+  return { phase, level: n, mark: mark === 'gust' || mark === 'fire' || mark === 'doze' ? mark : '' }
 }
 
 // Runs a program and resolves with what it wrote and its exit status; rejects
@@ -179,7 +201,13 @@ export const register: Register = on => {
     const self = Math.floor(Math.random() * 1e9)
     let phase: Phase = 'vacant'
     let level = 0
+    let mark: Mark = ''
     let dist = 0
+    // When the animal may move its next column, the animal last drawn, and
+    // until when the poof of its change stays.
+    let stepAt = 0
+    let drawn: string | undefined
+    let poofUntil = 0
     let polledAt = 0
     let isDrawing = false
     // The Python found, and what the row says when the picture cannot be drawn.
@@ -250,6 +278,7 @@ export const register: Register = on => {
         problem = undefined
         phase = live.phase
         level = live.level
+        mark = live.mark
         isDrawing = true
       } catch {
         // The meter did not start or did not finish. After a few times in a
@@ -271,10 +300,26 @@ export const register: Register = on => {
           await poll(now)
         }
         if (isDrawing && phase === 'run') {
-          dist += 1
-          wait = Math.round(1000 / Math.max(1, level))
+          // A redraw that comes early, for a poof, moves nothing.
+          if (now >= stepAt - MIN_WAIT_MS) {
+            dist += 1
+            stepAt = now + Math.round(1000 / Math.max(1, level))
+          }
+          wait = stepAt - now
         }
-        const line = isDrawing ? render(phase, level, dist) : problem
+        if (isDrawing) {
+          const kind = animalShown(phase, level)
+          if (drawn !== undefined && kind !== drawn) {
+            poofUntil = now + POOF_MS
+          }
+          drawn = kind
+        }
+        const isChanging = isDrawing && now < poofUntil
+        if (isChanging) {
+          wait = Math.min(wait, poofUntil - now)
+        }
+        wait = Math.max(MIN_WAIT_MS, wait)
+        const line = isDrawing ? render(phase, level, dist, mark, TRACK, isChanging) : problem
         if (line !== shown) {
           shown = line
           $.ui.invalidate('ui.render')

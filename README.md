@@ -15,9 +15,15 @@ running under the input box.
   run and sleeps between turns, always as a snail (`🐌💤`).
 - It eats the coins on its way: an eaten coin turns into `💲` behind it.
   After the last coin it starts again from the right.
-- The kind of animal is the speed: 17 of them, from a snail to an eagle.
-  Which speed gets which animal follows the user's own history, so everyone
-  sees the whole range.
+- The kind of animal is the speed, averaged over two minutes: 17 of them,
+  from a snail to an eagle. Which speed gets which animal follows the
+  user's own history, so everyone sees the whole range.
+- Right behind the animal is the speed of the last 10 seconds against that
+  average. Wind (`🐎💨`): it has just sped up, to 3 times the average or
+  more. Fire (`🐎🔥`): the same, and to 3 times the speed the fastest animal
+  starts at. Zzz (`🐎💤`): it stands, and no token has come for 10 seconds.
+- When the animal changes into another, a poof (`💥`) stands in its place
+  for a moment.
 - The faster it runs, the more often it is redrawn, one column at a time.
 - There is no text and no number on the line.
 
@@ -89,7 +95,7 @@ with the `python3` that is first on `PATH`:
 
 ```sh
 TAXI=$(ls -dt ~/.claude/plugins/cache/taxi-horse/taxi-horse/*/taxi-horse | head -n 1)
-"$TAXI" --demo                    # prints 21 lines of coins and animals, exit 0
+"$TAXI" --demo                    # prints 24 lines of coins and animals, exit 0
 ```
 
 If a coin or an animal shows as an empty box, the terminal has no colour
@@ -214,7 +220,7 @@ It makes no network requests.
 
 | Command | What it does |
 | --- | --- |
-| `taxi-horse --state` | what the mod runs: prints `<state> <level>` for the session on stdin |
+| `taxi-horse --state` | what the mod runs: prints `<state> <level>` for the session on stdin, and `gust`, `fire` or `doze` after them when that goes behind the animal |
 | `taxi-horse` | as the `statusLine` command: prints the line |
 | `taxi-horse --demo` | draws every state and every animal |
 | `taxi-horse --levels` | the speed at which each animal starts, for this user |

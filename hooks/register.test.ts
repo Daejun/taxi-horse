@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { animal, animalColumn, findPython, lastLine, parseLive, parseProbe, render } from './register'
-import type { Phase, Run } from './register'
+import { animal, animalColumn, animalShown, findPython, lastLine, parseLive, parseProbe, render } from './register'
+import type { Mark, Phase, Run } from './register'
 
 // What meter.py draws for the same state, level and distance: generated from
 // meter.render() and meter.animal_column(). The two must stay the same picture.
@@ -1471,8 +1471,12 @@ test('picks the animal by speed level', async () => {
 })
 
 test('reads what meter.py leaves and refuses anything else', async () => {
-  expect(parseLive('run 7')).toEqual({ phase: 'run', level: 7 })
-  expect(parseLive('vacant 0\n')).toEqual({ phase: 'vacant', level: 0 })
+  expect(parseLive('run 7')).toEqual({ phase: 'run', level: 7, mark: '' })
+  expect(parseLive('vacant 0\n')).toEqual({ phase: 'vacant', level: 0, mark: '' })
+  expect(parseLive('run 7 gust\n')).toEqual({ phase: 'run', level: 7, mark: 'gust' })
+  expect(parseLive('run 16 fire\n')).toEqual({ phase: 'run', level: 16, mark: 'fire' })
+  expect(parseLive('halt 3 doze\n')).toEqual({ phase: 'halt', level: 3, mark: 'doze' })
+  expect(parseLive('run 7 sparkle')).toEqual({ phase: 'run', level: 7, mark: '' })
   expect(parseLive('')).toBeUndefined()
   expect(parseLive('gallop 3')).toBeUndefined()
   expect(parseLive('run fast')).toBeUndefined()
@@ -1540,4 +1544,243 @@ test('reads the probe answer and the last line of an error', async () => {
   expect(parseProbe('Python 3.12.3')).toBeUndefined()
   expect(lastLine('Traceback (most recent call last):\n  File "x"\nValueError: bad\n')).toBe('ValueError: bad')
   expect(lastLine('')).toBe('')
+})
+
+// The same as LINES, with something behind the animal: generated from
+// meter.render(..., mark=...).
+const MARKED: readonly (readonly [Phase, number, number, Mark, string])[] = [
+  ['run', 0, 0, 'gust', '🪙      🪙      🪙      🪙      🪙    🐌💨'],
+  ['run', 0, 1, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💨'],
+  ['run', 0, 5, 'gust', '🪙      🪙      🪙      🪙       🐌💨'],
+  ['run', 0, 6, 'gust', '🪙      🪙      🪙      🪙      🐌💨'],
+  ['run', 0, 7, 'gust', '🪙      🪙      🪙      🪙     🐌💨'],
+  ['run', 0, 13, 'gust', '🪙      🪙      🪙       🐌💨   💲'],
+  ['run', 0, 14, 'gust', '🪙      🪙      🪙      🐌💨    💲'],
+  ['run', 0, 22, 'gust', '🪙      🪙      🐌💨    💲      💲'],
+  ['run', 0, 30, 'gust', '🪙      🐌💨    💲      💲      💲'],
+  ['run', 0, 36, 'gust', '🪙🐌💨  💲      💲      💲      💲'],
+  ['run', 0, 37, 'gust', '🐌💨    💲      💲      💲      💲'],
+  ['run', 0, 38, 'gust', '🪙      🪙      🪙      🪙      🪙    🐌💨'],
+  ['run', 0, 39, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💨'],
+  ['run', 0, 77, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💨'],
+  ['run', 7, 0, 'gust', '🪙      🪙      🪙      🪙      🪙    🐘💨'],
+  ['run', 7, 1, 'gust', '🪙      🪙      🪙      🪙      🪙   🐘💨'],
+  ['run', 7, 5, 'gust', '🪙      🪙      🪙      🪙       🐘💨'],
+  ['run', 7, 6, 'gust', '🪙      🪙      🪙      🪙      🐘💨'],
+  ['run', 7, 7, 'gust', '🪙      🪙      🪙      🪙     🐘💨'],
+  ['run', 7, 13, 'gust', '🪙      🪙      🪙       🐘💨   💲'],
+  ['run', 7, 14, 'gust', '🪙      🪙      🪙      🐘💨    💲'],
+  ['run', 7, 22, 'gust', '🪙      🪙      🐘💨    💲      💲'],
+  ['run', 7, 30, 'gust', '🪙      🐘💨    💲      💲      💲'],
+  ['run', 7, 36, 'gust', '🪙🐘💨  💲      💲      💲      💲'],
+  ['run', 7, 37, 'gust', '🐘💨    💲      💲      💲      💲'],
+  ['run', 7, 38, 'gust', '🪙      🪙      🪙      🪙      🪙    🐘💨'],
+  ['run', 7, 39, 'gust', '🪙      🪙      🪙      🪙      🪙   🐘💨'],
+  ['run', 7, 77, 'gust', '🪙      🪙      🪙      🪙      🪙   🐘💨'],
+  ['run', 16, 0, 'gust', '🪙      🪙      🪙      🪙      🪙    🦅💨'],
+  ['run', 16, 1, 'gust', '🪙      🪙      🪙      🪙      🪙   🦅💨'],
+  ['run', 16, 5, 'gust', '🪙      🪙      🪙      🪙       🦅💨'],
+  ['run', 16, 6, 'gust', '🪙      🪙      🪙      🪙      🦅💨'],
+  ['run', 16, 7, 'gust', '🪙      🪙      🪙      🪙     🦅💨'],
+  ['run', 16, 13, 'gust', '🪙      🪙      🪙       🦅💨   💲'],
+  ['run', 16, 14, 'gust', '🪙      🪙      🪙      🦅💨    💲'],
+  ['run', 16, 22, 'gust', '🪙      🪙      🦅💨    💲      💲'],
+  ['run', 16, 30, 'gust', '🪙      🦅💨    💲      💲      💲'],
+  ['run', 16, 36, 'gust', '🪙🦅💨  💲      💲      💲      💲'],
+  ['run', 16, 37, 'gust', '🦅💨    💲      💲      💲      💲'],
+  ['run', 16, 38, 'gust', '🪙      🪙      🪙      🪙      🪙    🦅💨'],
+  ['run', 16, 39, 'gust', '🪙      🪙      🪙      🪙      🪙   🦅💨'],
+  ['run', 16, 77, 'gust', '🪙      🪙      🪙      🪙      🪙   🦅💨'],
+  ['run', 0, 0, 'fire', '🪙      🪙      🪙      🪙      🪙    🐌🔥'],
+  ['run', 0, 1, 'fire', '🪙      🪙      🪙      🪙      🪙   🐌🔥'],
+  ['run', 0, 5, 'fire', '🪙      🪙      🪙      🪙       🐌🔥'],
+  ['run', 0, 6, 'fire', '🪙      🪙      🪙      🪙      🐌🔥'],
+  ['run', 0, 7, 'fire', '🪙      🪙      🪙      🪙     🐌🔥'],
+  ['run', 0, 13, 'fire', '🪙      🪙      🪙       🐌🔥   💲'],
+  ['run', 0, 14, 'fire', '🪙      🪙      🪙      🐌🔥    💲'],
+  ['run', 0, 22, 'fire', '🪙      🪙      🐌🔥    💲      💲'],
+  ['run', 0, 30, 'fire', '🪙      🐌🔥    💲      💲      💲'],
+  ['run', 0, 36, 'fire', '🪙🐌🔥  💲      💲      💲      💲'],
+  ['run', 0, 37, 'fire', '🐌🔥    💲      💲      💲      💲'],
+  ['run', 0, 38, 'fire', '🪙      🪙      🪙      🪙      🪙    🐌🔥'],
+  ['run', 0, 39, 'fire', '🪙      🪙      🪙      🪙      🪙   🐌🔥'],
+  ['run', 0, 77, 'fire', '🪙      🪙      🪙      🪙      🪙   🐌🔥'],
+  ['run', 7, 0, 'fire', '🪙      🪙      🪙      🪙      🪙    🐘🔥'],
+  ['run', 7, 1, 'fire', '🪙      🪙      🪙      🪙      🪙   🐘🔥'],
+  ['run', 7, 5, 'fire', '🪙      🪙      🪙      🪙       🐘🔥'],
+  ['run', 7, 6, 'fire', '🪙      🪙      🪙      🪙      🐘🔥'],
+  ['run', 7, 7, 'fire', '🪙      🪙      🪙      🪙     🐘🔥'],
+  ['run', 7, 13, 'fire', '🪙      🪙      🪙       🐘🔥   💲'],
+  ['run', 7, 14, 'fire', '🪙      🪙      🪙      🐘🔥    💲'],
+  ['run', 7, 22, 'fire', '🪙      🪙      🐘🔥    💲      💲'],
+  ['run', 7, 30, 'fire', '🪙      🐘🔥    💲      💲      💲'],
+  ['run', 7, 36, 'fire', '🪙🐘🔥  💲      💲      💲      💲'],
+  ['run', 7, 37, 'fire', '🐘🔥    💲      💲      💲      💲'],
+  ['run', 7, 38, 'fire', '🪙      🪙      🪙      🪙      🪙    🐘🔥'],
+  ['run', 7, 39, 'fire', '🪙      🪙      🪙      🪙      🪙   🐘🔥'],
+  ['run', 7, 77, 'fire', '🪙      🪙      🪙      🪙      🪙   🐘🔥'],
+  ['run', 16, 0, 'fire', '🪙      🪙      🪙      🪙      🪙    🦅🔥'],
+  ['run', 16, 1, 'fire', '🪙      🪙      🪙      🪙      🪙   🦅🔥'],
+  ['run', 16, 5, 'fire', '🪙      🪙      🪙      🪙       🦅🔥'],
+  ['run', 16, 6, 'fire', '🪙      🪙      🪙      🪙      🦅🔥'],
+  ['run', 16, 7, 'fire', '🪙      🪙      🪙      🪙     🦅🔥'],
+  ['run', 16, 13, 'fire', '🪙      🪙      🪙       🦅🔥   💲'],
+  ['run', 16, 14, 'fire', '🪙      🪙      🪙      🦅🔥    💲'],
+  ['run', 16, 22, 'fire', '🪙      🪙      🦅🔥    💲      💲'],
+  ['run', 16, 30, 'fire', '🪙      🦅🔥    💲      💲      💲'],
+  ['run', 16, 36, 'fire', '🪙🦅🔥  💲      💲      💲      💲'],
+  ['run', 16, 37, 'fire', '🦅🔥    💲      💲      💲      💲'],
+  ['run', 16, 38, 'fire', '🪙      🪙      🪙      🪙      🪙    🦅🔥'],
+  ['run', 16, 39, 'fire', '🪙      🪙      🪙      🪙      🪙   🦅🔥'],
+  ['run', 16, 77, 'fire', '🪙      🪙      🪙      🪙      🪙   🦅🔥'],
+  ['halt', 0, 0, 'doze', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['halt', 0, 1, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['halt', 0, 5, 'doze', '🪙      🪙      🪙      🪙       🐌💤'],
+  ['halt', 0, 6, 'doze', '🪙      🪙      🪙      🪙      🐌💤'],
+  ['halt', 0, 7, 'doze', '🪙      🪙      🪙      🪙     🐌💤'],
+  ['halt', 0, 13, 'doze', '🪙      🪙      🪙       🐌💤   💲'],
+  ['halt', 0, 14, 'doze', '🪙      🪙      🪙      🐌💤    💲'],
+  ['halt', 0, 22, 'doze', '🪙      🪙      🐌💤    💲      💲'],
+  ['halt', 0, 30, 'doze', '🪙      🐌💤    💲      💲      💲'],
+  ['halt', 0, 36, 'doze', '🪙🐌💤  💲      💲      💲      💲'],
+  ['halt', 0, 37, 'doze', '🐌💤    💲      💲      💲      💲'],
+  ['halt', 0, 38, 'doze', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['halt', 0, 39, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['halt', 0, 77, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['halt', 7, 0, 'doze', '🪙      🪙      🪙      🪙      🪙    🐘💤'],
+  ['halt', 7, 1, 'doze', '🪙      🪙      🪙      🪙      🪙   🐘💤'],
+  ['halt', 7, 5, 'doze', '🪙      🪙      🪙      🪙       🐘💤'],
+  ['halt', 7, 6, 'doze', '🪙      🪙      🪙      🪙      🐘💤'],
+  ['halt', 7, 7, 'doze', '🪙      🪙      🪙      🪙     🐘💤'],
+  ['halt', 7, 13, 'doze', '🪙      🪙      🪙       🐘💤   💲'],
+  ['halt', 7, 14, 'doze', '🪙      🪙      🪙      🐘💤    💲'],
+  ['halt', 7, 22, 'doze', '🪙      🪙      🐘💤    💲      💲'],
+  ['halt', 7, 30, 'doze', '🪙      🐘💤    💲      💲      💲'],
+  ['halt', 7, 36, 'doze', '🪙🐘💤  💲      💲      💲      💲'],
+  ['halt', 7, 37, 'doze', '🐘💤    💲      💲      💲      💲'],
+  ['halt', 7, 38, 'doze', '🪙      🪙      🪙      🪙      🪙    🐘💤'],
+  ['halt', 7, 39, 'doze', '🪙      🪙      🪙      🪙      🪙   🐘💤'],
+  ['halt', 7, 77, 'doze', '🪙      🪙      🪙      🪙      🪙   🐘💤'],
+  ['halt', 16, 0, 'doze', '🪙      🪙      🪙      🪙      🪙    🦅💤'],
+  ['halt', 16, 1, 'doze', '🪙      🪙      🪙      🪙      🪙   🦅💤'],
+  ['halt', 16, 5, 'doze', '🪙      🪙      🪙      🪙       🦅💤'],
+  ['halt', 16, 6, 'doze', '🪙      🪙      🪙      🪙      🦅💤'],
+  ['halt', 16, 7, 'doze', '🪙      🪙      🪙      🪙     🦅💤'],
+  ['halt', 16, 13, 'doze', '🪙      🪙      🪙       🦅💤   💲'],
+  ['halt', 16, 14, 'doze', '🪙      🪙      🪙      🦅💤    💲'],
+  ['halt', 16, 22, 'doze', '🪙      🪙      🦅💤    💲      💲'],
+  ['halt', 16, 30, 'doze', '🪙      🦅💤    💲      💲      💲'],
+  ['halt', 16, 36, 'doze', '🪙🦅💤  💲      💲      💲      💲'],
+  ['halt', 16, 37, 'doze', '🦅💤    💲      💲      💲      💲'],
+  ['halt', 16, 38, 'doze', '🪙      🪙      🪙      🪙      🪙    🦅💤'],
+  ['halt', 16, 39, 'doze', '🪙      🪙      🪙      🪙      🪙   🦅💤'],
+  ['halt', 16, 77, 'doze', '🪙      🪙      🪙      🪙      🪙   🦅💤'],
+  ['vacant', 0, 0, 'gust', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 0, 1, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 0, 5, 'gust', '🪙      🪙      🪙      🪙       🐌💤'],
+  ['vacant', 0, 6, 'gust', '🪙      🪙      🪙      🪙      🐌💤'],
+  ['vacant', 0, 7, 'gust', '🪙      🪙      🪙      🪙     🐌💤'],
+  ['vacant', 0, 13, 'gust', '🪙      🪙      🪙       🐌💤   💲'],
+  ['vacant', 0, 14, 'gust', '🪙      🪙      🪙      🐌💤    💲'],
+  ['vacant', 0, 22, 'gust', '🪙      🪙      🐌💤    💲      💲'],
+  ['vacant', 0, 30, 'gust', '🪙      🐌💤    💲      💲      💲'],
+  ['vacant', 0, 36, 'gust', '🪙🐌💤  💲      💲      💲      💲'],
+  ['vacant', 0, 37, 'gust', '🐌💤    💲      💲      💲      💲'],
+  ['vacant', 0, 38, 'gust', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 0, 39, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 0, 77, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 7, 0, 'gust', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 7, 1, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 7, 5, 'gust', '🪙      🪙      🪙      🪙       🐌💤'],
+  ['vacant', 7, 6, 'gust', '🪙      🪙      🪙      🪙      🐌💤'],
+  ['vacant', 7, 7, 'gust', '🪙      🪙      🪙      🪙     🐌💤'],
+  ['vacant', 7, 13, 'gust', '🪙      🪙      🪙       🐌💤   💲'],
+  ['vacant', 7, 14, 'gust', '🪙      🪙      🪙      🐌💤    💲'],
+  ['vacant', 7, 22, 'gust', '🪙      🪙      🐌💤    💲      💲'],
+  ['vacant', 7, 30, 'gust', '🪙      🐌💤    💲      💲      💲'],
+  ['vacant', 7, 36, 'gust', '🪙🐌💤  💲      💲      💲      💲'],
+  ['vacant', 7, 37, 'gust', '🐌💤    💲      💲      💲      💲'],
+  ['vacant', 7, 38, 'gust', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 7, 39, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 7, 77, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 16, 0, 'gust', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 16, 1, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 16, 5, 'gust', '🪙      🪙      🪙      🪙       🐌💤'],
+  ['vacant', 16, 6, 'gust', '🪙      🪙      🪙      🪙      🐌💤'],
+  ['vacant', 16, 7, 'gust', '🪙      🪙      🪙      🪙     🐌💤'],
+  ['vacant', 16, 13, 'gust', '🪙      🪙      🪙       🐌💤   💲'],
+  ['vacant', 16, 14, 'gust', '🪙      🪙      🪙      🐌💤    💲'],
+  ['vacant', 16, 22, 'gust', '🪙      🪙      🐌💤    💲      💲'],
+  ['vacant', 16, 30, 'gust', '🪙      🐌💤    💲      💲      💲'],
+  ['vacant', 16, 36, 'gust', '🪙🐌💤  💲      💲      💲      💲'],
+  ['vacant', 16, 37, 'gust', '🐌💤    💲      💲      💲      💲'],
+  ['vacant', 16, 38, 'gust', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 16, 39, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 16, 77, 'gust', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 0, 0, 'doze', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 0, 1, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 0, 5, 'doze', '🪙      🪙      🪙      🪙       🐌💤'],
+  ['vacant', 0, 6, 'doze', '🪙      🪙      🪙      🪙      🐌💤'],
+  ['vacant', 0, 7, 'doze', '🪙      🪙      🪙      🪙     🐌💤'],
+  ['vacant', 0, 13, 'doze', '🪙      🪙      🪙       🐌💤   💲'],
+  ['vacant', 0, 14, 'doze', '🪙      🪙      🪙      🐌💤    💲'],
+  ['vacant', 0, 22, 'doze', '🪙      🪙      🐌💤    💲      💲'],
+  ['vacant', 0, 30, 'doze', '🪙      🐌💤    💲      💲      💲'],
+  ['vacant', 0, 36, 'doze', '🪙🐌💤  💲      💲      💲      💲'],
+  ['vacant', 0, 37, 'doze', '🐌💤    💲      💲      💲      💲'],
+  ['vacant', 0, 38, 'doze', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 0, 39, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 0, 77, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 7, 0, 'doze', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 7, 1, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 7, 5, 'doze', '🪙      🪙      🪙      🪙       🐌💤'],
+  ['vacant', 7, 6, 'doze', '🪙      🪙      🪙      🪙      🐌💤'],
+  ['vacant', 7, 7, 'doze', '🪙      🪙      🪙      🪙     🐌💤'],
+  ['vacant', 7, 13, 'doze', '🪙      🪙      🪙       🐌💤   💲'],
+  ['vacant', 7, 14, 'doze', '🪙      🪙      🪙      🐌💤    💲'],
+  ['vacant', 7, 22, 'doze', '🪙      🪙      🐌💤    💲      💲'],
+  ['vacant', 7, 30, 'doze', '🪙      🐌💤    💲      💲      💲'],
+  ['vacant', 7, 36, 'doze', '🪙🐌💤  💲      💲      💲      💲'],
+  ['vacant', 7, 37, 'doze', '🐌💤    💲      💲      💲      💲'],
+  ['vacant', 7, 38, 'doze', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 7, 39, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 7, 77, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 16, 0, 'doze', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 16, 1, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 16, 5, 'doze', '🪙      🪙      🪙      🪙       🐌💤'],
+  ['vacant', 16, 6, 'doze', '🪙      🪙      🪙      🪙      🐌💤'],
+  ['vacant', 16, 7, 'doze', '🪙      🪙      🪙      🪙     🐌💤'],
+  ['vacant', 16, 13, 'doze', '🪙      🪙      🪙       🐌💤   💲'],
+  ['vacant', 16, 14, 'doze', '🪙      🪙      🪙      🐌💤    💲'],
+  ['vacant', 16, 22, 'doze', '🪙      🪙      🐌💤    💲      💲'],
+  ['vacant', 16, 30, 'doze', '🪙      🐌💤    💲      💲      💲'],
+  ['vacant', 16, 36, 'doze', '🪙🐌💤  💲      💲      💲      💲'],
+  ['vacant', 16, 37, 'doze', '🐌💤    💲      💲      💲      💲'],
+  ['vacant', 16, 38, 'doze', '🪙      🪙      🪙      🪙      🪙    🐌💤'],
+  ['vacant', 16, 39, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+  ['vacant', 16, 77, 'doze', '🪙      🪙      🪙      🪙      🪙   🐌💤'],
+]
+
+test('draws wind, fire and zzz behind the animal as meter.py does', async () => {
+  for (const [phase, level, dist, mark, line] of MARKED) {
+    expect(render(phase, level, dist, mark)).toBe(line)
+  }
+  expect(render('run', 7, 13, 'gust')).toContain('🐘💨')
+  expect(render('run', 7, 13, 'fire')).toContain('🐘🔥')
+  expect(render('halt', 7, 13, 'doze')).toContain('🐘💤')
+})
+
+test('draws a poof in place of an animal that is changing', async () => {
+  const before = render('run', 7, 13, 'gust')
+  const during = render('run', 7, 13, 'gust', 40, true)
+  expect(during).toContain('💥')
+  expect(during).not.toContain('🐘')
+  expect(during).not.toContain('💨')
+  // The poof stands where the animal stood, and the coins stay.
+  expect([...during].indexOf('💥')).toBe([...before].indexOf('🐘'))
+  expect(during.replace('💥', '🐘')).toBe(render('run', 7, 13))
+  // Falling asleep and waking up change the animal too: to and from the snail.
+  expect(animalShown('vacant', 7)).toBe('🐌')
+  expect(animalShown('halt', 7)).toBe('🐘')
+  expect(render('vacant', 7, 13, '', 40, true)).not.toContain('💤')
 })

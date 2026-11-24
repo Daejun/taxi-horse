@@ -71,7 +71,12 @@ class MeterTest(unittest.TestCase):
 
     def run_meter(self, now, **kw):
         """(state, tok/s, tokens counted, catching_up, distance run, level)"""
-        return meter.measure(self.data, now, directory=self.state, rates=self.rates, **kw)
+        return meter.measure(self.data, now, directory=self.state, rates=self.rates, **kw)[:6]
+
+    def run_mark(self, now):
+        """(state, what goes behind the animal)"""
+        m = meter.measure(self.data, now, directory=self.state, rates=self.rates)
+        return m[0], m[6]
 
     def totals(self):
         with open(os.path.join(self.state, "sess.json")) as f:
@@ -401,8 +406,14 @@ class MeterTest(unittest.TestCase):
 
     # ---- drawing
 
-    def plain(self, ph, lvl, dist):
-        return meter.render(ph, lvl, dist, width=meter.TRACK)
+    def plain(self, ph, lvl, dist, **kw):
+        return meter.render(ph, lvl, dist, width=meter.TRACK, **kw)
+
+    def test_state_mode_names_what_goes_behind_the_animal(self):
+        now = datetime.now(timezone.utc).timestamp()
+        self.write(prompt(now - 30), assistant(now - 20, "m1", [0, 0, 0, 50], ["tool_use"]))
+        out = self.run_cli("--state")
+        self.assertEqual((out.returncode, out.stdout), (0, "halt 0 doze\n"))
 
     def test_every_level_has_its_own_animal_and_none_is_a_dragon(self):
         animals = [meter.animal(n) for n in range(meter.LEVEL_MAX + 1)]
@@ -516,6 +527,71 @@ class MeterTest(unittest.TestCase):
         self.assertIn(meter.animal(8), self.plain(HALT, 8, 9.0), "standing, it stays what it was")
         self.assertNotIn("💤", self.plain(HALT, 0, 9.0))
         self.assertNotIn("💤", self.plain(RUN, 5, 9.0))
+
+    # ---- what goes behind the animal: the speed of the moment
+
+    def test_wind_when_the_moment_runs_at_three_times_the_average(self):
+        self.run_meter(T0)
+        self.write(prompt(T0 + 1), assistant(T0 + 2, "m1", [0, 0, 0, 3000], ["tool_use"]),
+                   tool_result(T0 + 3))
+        self.assertEqual(self.run_mark(T0 + 4), (RUN, meter.GUST), "all the tokens of the window came just now")
+        self.assertEqual(self.run_mark(T0 + 13), (RUN, meter.GUST))
+        self.assertEqual(self.run_mark(T0 + 14), (RUN, ""), "ten seconds on, the moment is over")
+
+    def test_wind_dies_down_as_the_average_catches_up(self):
+        self.run_meter(T0)
+        self.write(prompt(T0 + 1))
+        marks = []
+        for k in range(8):                 # the same response every ten seconds
+            t = T0 + 2 + 10 * k
+            self.write(assistant(t, "m%d" % k, [0, 0, 0, 1000], ["tool_use"]), tool_result(t + 1))
+            marks.append(self.run_mark(t + 2))
+        self.assertEqual(marks[:4], [(RUN, meter.GUST)] * 4, "from rest, the moment is ahead of the average")
+        self.assertEqual(marks[4:], [(RUN, "")] * 4, "a steady speed has no wind")
+
+    def test_no_wind_for_a_speed_that_is_still_a_snails(self):
+        self.run_meter(T0)
+        self.write(prompt(T0 + 1), assistant(T0 + 2, "m1", [0, 0, 0, 300], ["tool_use"]),
+                   tool_result(T0 + 3))
+        self.assertEqual(self.run_mark(T0 + 4), (RUN, ""), "30 tok/s for a moment is no gust")
+
+    def test_fire_when_the_moment_is_three_times_the_fastest_animals_start(self):
+        self.run_meter(T0)
+        self.write(prompt(T0 + 1), assistant(T0 + 2, "m1", [0, 200000, 0, 0], ["tool_use"]),
+                   tool_result(T0 + 3))
+        self.assertEqual(self.run_mark(T0 + 4), (RUN, meter.FIRE))
+        # The line between wind and fire follows the user's own history.
+        hist = [0.0] * meter.HIST_SIZE
+        hist[int(meter.bucket_pos(100.0))] = 1000.0
+        top = meter.level_starts(hist)[-1]
+        for tokens, want in ((meter.FIRE_FACTOR * top * 10 - 10, meter.GUST), (meter.FIRE_FACTOR * top * 10, meter.FIRE)):
+            st = {"ev": [(T0 - 1, tokens)]}
+            self.assertEqual(meter.mark(st, T0, RUN, tokens / W, hist), want, tokens)
+
+    def test_standing_animal_dozes_after_ten_seconds_without_a_token(self):
+        self.run_meter(T0)
+        self.write(prompt(T0 + 1), assistant(T0 + 2, "m1", [0, 0, 0, 3000], ["tool_use"]))
+        self.assertEqual(self.run_mark(T0 + 3), (HALT, ""), "it has only just stopped")
+        self.assertEqual(self.run_mark(T0 + 12), (HALT, ""))
+        self.assertEqual(self.run_mark(T0 + 13), (HALT, meter.DOZE))
+        self.write(tool_result(T0 + 14))
+        self.assertEqual(self.run_mark(T0 + 15), (RUN, ""), "a request is out")
+        self.assertEqual(self.run_mark(T0 + 100), (RUN, ""), "no zzz while a request is out, however long it takes")
+        self.write(assistant(T0 + 101, "m2", [0, 0, 0, 10], ["text"]))
+        self.assertEqual(self.run_mark(T0 + 102), (VACANT, ""), "between turns the picture has its own zzz")
+
+    def test_mark_is_drawn_right_behind_the_animal(self):
+        a = meter.animal(7)
+        self.assertIn(a + "💨", self.plain(RUN, 7, 9.0, mark=meter.GUST))
+        self.assertIn(a + "🔥", self.plain(RUN, 7, 9.0, mark=meter.FIRE))
+        self.assertIn(a + "💤", self.plain(HALT, 7, 9.0, mark=meter.DOZE), "it dozes as the animal it is")
+        asleep = self.plain(VACANT, 7, 9.0, mark=meter.GUST)
+        self.assertEqual(asleep, self.plain(VACANT, 7, 9.0), "between turns a mark changes nothing")
+        for d in range(0, 90):
+            line = self.plain(RUN, 7, float(d), mark=meter.FIRE)
+            self.assertEqual((line.count(a + "🔥"), line.count("🔥")), (1, 1), line)
+            self.assertLessEqual(columns(line), meter.TRACK + 2, line)
+            self.assertEqual(line.index(a), self.plain(RUN, 7, float(d)).index(a), "the animal stays where it is")
 
     def test_narrow_terminal_shortens_the_track(self):
         old = os.environ.get("COLUMNS")

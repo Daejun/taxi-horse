@@ -4,8 +4,9 @@ This is the counting half. There are two ways to run it.
 
 With the mod (the plugin this file ships in): the mod runs
 "taxi-horse --state" once a second, with the session id and the transcript
-path as JSON on stdin, gets back "<state> <level>" and draws the line itself,
-on a row of its own under the input box. It redraws as often as the animal
+path as JSON on stdin, gets back "<state> <level>", with a third word when
+something goes behind the animal ("gust", "fire" or "doze"), and draws the
+line itself, on a row of its own under the input box. It redraws as often as the animal
 moves a column, so the animal never jumps.
 
 As the statusLine command, without the mod: this script draws the line too,
@@ -26,6 +27,17 @@ number and no ground line.
     standing   only tools are running
     asleep     between turns. Whatever it was, it sleeps as a snail.
 The animal stops, sleeps and starts again where it stands.
+
+The animal is the average speed. What goes behind it is the speed of the
+moment, the last GUST_WINDOW seconds, against that average:
+    wind       running, and the moment is GUST_FACTOR times the average or
+               more: it has just sped up
+    fire       the same, and the moment is FIRE_FACTOR times the speed the
+               fastest animal starts at, or more
+    zzz        standing, and no token for DOZE_AFTER seconds: it has just
+               stopped. It dozes as the animal it is.
+While a request is out there is no zzz, however long it takes: the tokens of
+a response only show when it is complete (see below).
 
 The speed is the number of tokens the meter registered in the last WINDOW
 seconds, per second. The tokens counted are input + cache write + output
@@ -55,13 +67,14 @@ Install: see README.md.
 
 Run by hand:
     taxi-horse --demo          draw every state
-    taxi-horse --state         what the mod runs: prints "<state> <level>"
+    taxi-horse --state         what the mod runs: prints "<state> <level>", and
+                               "gust", "fire" or "doze" after them
     taxi-horse --levels        the speed at which each animal starts, for this user
     taxi-horse --learn         rebuild the history from recent transcripts
     taxi-horse < statusline.json
 
-TAXI_HORSE_DEBUG=<file> appends one line per run: time, state, rate, and the
-last thing seen in each transcript.
+TAXI_HORSE_DEBUG=<file> appends one line per run: time, state, rate, what
+goes behind the animal, and the last thing seen in each transcript.
 """
 import json
 import math
@@ -82,6 +95,10 @@ TRACK = 40               # length of the track in columns
 STEP = 1.0               # columns a second. The status line is redrawn once a second
                          # at most, so anything faster would be a jump of several columns.
 LEVEL_MAX = 16           # speed levels run from 0 to this
+GUST_WINDOW = 10.0       # seconds the speed of the moment is taken over
+GUST_FACTOR = 3.0        # a gust: the moment is this many times the average
+FIRE_FACTOR = 3.0        # fire: a gust at this many times the speed the fastest animal starts at
+DOZE_AFTER = 10.0        # seconds without a token before a standing animal dozes
 # The level of a rate is the share of this user's earlier rates that were
 # lower, cut into LEVEL_MAX + 1 equal parts. Until there is a history a guess
 # stands in for it: rates spread evenly, on a log scale, from RATE_MIN to RATE_MAX.
@@ -294,9 +311,9 @@ def prune(st, now):
             del ids[mid]
 
 
-def rate(st, now):
-    """Tokens registered in the last WINDOW seconds, per second."""
-    return sum(e[1] for e in st["ev"] if now - WINDOW < e[0] <= now) / WINDOW
+def rate(st, now, window=WINDOW):
+    """Tokens registered in the last window seconds, per second."""
+    return sum(e[1] for e in st["ev"] if now - window < e[0] <= now) / window
 
 
 RUN, HALT, VACANT = "run", "halt", "vacant"
@@ -390,6 +407,28 @@ def level_starts(hist=None):
     return starts
 
 
+GUST, FIRE, DOZE = "gust", "fire", "doze"
+
+
+def mark(st, now, ph, tok_s, hist=None):
+    """What goes behind the animal: the speed of the moment against the average.
+
+    GUST while running, when the last GUST_WINDOW seconds ran at GUST_FACTOR
+    times the average or more, and fast enough to be more than a snail. FIRE
+    when that is also FIRE_FACTOR times the speed the fastest animal starts at.
+    DOZE while standing, when no token was registered for DOZE_AFTER seconds.
+    Otherwise "".
+    """
+    if ph == RUN:
+        fast = rate(st, now, GUST_WINDOW)
+        if fast > 0 and fast >= GUST_FACTOR * tok_s and level(fast, hist) >= 1:
+            return FIRE if fast >= FIRE_FACTOR * level_starts(hist)[-1] else GUST
+    elif ph == HALT:
+        if not any(now - DOZE_AFTER < e[0] <= now for e in st["ev"]):
+            return DOZE
+    return ""
+
+
 def learn(root=None, limit=200, path=None):
     """Rebuild the history from this user's most recent transcripts.
 
@@ -476,6 +515,7 @@ COIN_GAP = 8                         # a coin every so many columns, from the le
 # rabbit, kangaroo, deer, horse, tiger, leopard, eagle. With the rates of 150
 # recent sessions the median is the elephant and the 94th percentile the deer.
 ANIMALS = tuple(enumerate("🐌🐢🦔🐁🐓🐖🐑🐘🐪🐕🐇🦘🦌🐎🐅🐆🦅"))
+BEHIND = {GUST: "💨", FIRE: "🔥", DOZE: "💤"}      # what a mark draws behind the animal
 
 
 def animal(lvl):
@@ -505,16 +545,19 @@ def animal_column(dist, width=TRACK):
     return 0 if pos == lap - 1 else width - 2 - pos
 
 
-def render(ph, lvl, dist, catching_up=False, width=None):
-    """The line: coins ahead of the animal, dollar signs behind it, its zzz when asleep."""
+def render(ph, lvl, dist, catching_up=False, width=None, mark=""):
+    """The line: coins ahead of the animal, dollar signs behind it, and right
+    behind it its zzz when asleep, or the wind, fire or zzz of its mark."""
     if width is None:
         width = track_width()
     x = animal_column(dist, width)
-    # Two-column glyphs by their left column. The animal and its zzz come first:
-    # a coin or a dollar sign they would overlap is left out.
+    # Two-column glyphs by their left column. The animal and what is right
+    # behind it come first: a coin or a dollar sign they would overlap is left
+    # out.
     glyphs = {x: animal(0 if ph == VACANT else lvl)}
-    if ph == VACANT:
-        glyphs[x + 2] = "💤"
+    behind = "💤" if ph == VACANT else BEHIND.get(mark)
+    if behind:
+        glyphs[x + 2] = behind
     for c in range(0, width - 4, COIN_GAP):
         if not any(abs(c - taken) < 2 for taken in list(glyphs)):
             glyphs[c] = COIN if c < x else EATEN
@@ -535,7 +578,8 @@ def render(ph, lvl, dist, catching_up=False, width=None):
 # ---------------------------------------------------------------- entry points
 
 def measure(data, now, directory=None, budget=SCAN_BUDGET, rates=None):
-    """Return (state, tok/s, tokens counted, catching_up, distance run, level) for a status line input."""
+    """Return (state, tok/s, tokens counted, catching_up, distance run, level,
+    mark) for a status line input."""
     transcript = data.get("transcript_path")
     session = os.path.basename(str(data.get("session_id") or "unknown"))
     directory = directory or state_dir()
@@ -578,7 +622,9 @@ def measure(data, now, directory=None, budget=SCAN_BUDGET, rates=None):
             pass                         # kept for the next try
         st["hf"] = now
         changed = True
-    lvl = level(tok_s, load_rates(rates))
+    hist = load_rates(rates)
+    lvl = level(tok_s, hist)
+    mk = mark(st, now, ph, tok_s, hist)
     if changed or created or len(st["ev"]) != before:
         os.makedirs(directory, mode=0o700, exist_ok=True)
         if created:
@@ -592,10 +638,10 @@ def measure(data, now, directory=None, budget=SCAN_BUDGET, rates=None):
                                               now - fs["ts"])
                          for k, fs in st["files"].items())
         with open(debug, "a") as f:
-            f.write("%.3f %s %s rate=%.1f level=%d dist=%.1f counted=%d new=%s %s\n"
-                    % (now, session[:8], ph, tok_s, lvl, dist, burned(st["tot"]),
+            f.write("%.3f %s %s rate=%.1f level=%d mark=%s dist=%.1f counted=%d new=%s %s\n"
+                    % (now, session[:8], ph, tok_s, lvl, mk or "-", dist, burned(st["tot"]),
                        bool(changed), tails))
-    return ph, tok_s, burned(st["tot"]), not complete, dist, lvl
+    return ph, tok_s, burned(st["tot"]), not complete, dist, lvl, mk
 
 
 MOD_FRESH = 3.0          # seconds a mod's sign of life counts for
@@ -610,15 +656,18 @@ def mod_draws(directory, session, now):
 
 
 def demo():
-    def show(ph, lvl, dist, note):
-        line = render(ph, lvl, dist)
+    def show(ph, lvl, dist, note, mark=""):
+        line = render(ph, lvl, dist, mark=mark)
         pad = TRACK + 4 - sum(1 + (ord(ch) > 0x1F000) for ch in line)
         print(line + " " * pad, note)
 
     show(VACANT, 0, 12.0, "<- asleep: between turns")
     show(HALT, 7, 12.0, "<- standing: tools running")
+    show(HALT, 7, 12.0, "<- dozing: standing, and no token for a while", DOZE)
     for lvl in range(LEVEL_MAX + 1):
         show(RUN, lvl, 13.0, "<- running, level %d" % lvl)
+    show(RUN, 7, 13.0, "<- wind: it has just sped up", GUST)
+    show(RUN, 7, 13.0, "<- fire: it has just sped up, to a great speed", FIRE)
     show(RUN, 7, 25.0, "<- three coins eaten: dollar signs behind it")
     show(RUN, 7, lap_length() - 1.0, "<- at the left end: the last coin is eaten")
 
@@ -646,11 +695,11 @@ def main():
     now = time.time()
     directory = state_dir()
     session = os.path.basename(str(data.get("session_id") or "unknown"))
-    ph, _tok_s, _counted, catching_up, dist, lvl = measure(data, now, directory)
+    ph, _tok_s, _counted, catching_up, dist, lvl, mk = measure(data, now, directory)
     if "--state" in sys.argv:
-        print("%s %d" % (ph, lvl))
+        print(("%s %d %s" % (ph, lvl, mk)).rstrip())
     elif not mod_draws(directory, session, now):
-        print(render(ph, lvl, dist, catching_up))
+        print(render(ph, lvl, dist, catching_up, mark=mk))
 
 
 def cli():
