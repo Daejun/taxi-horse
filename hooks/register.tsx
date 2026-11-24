@@ -1,3 +1,4 @@
+import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 // The taxi_horse line, drawn by the session itself on a row of its own under
@@ -27,6 +28,8 @@ import type { Register } from 'claude-code'
 // session still waits for: background work in flight, and wakeups it has
 // scheduled. While there is any, an hourglass stands in place of the zzz
 // between turns. meter.py reads the transcript alone and draws the zzz.
+// The engine says it once, so the session keeps the answer ($.state): a copy
+// of this mod that a reload has just loaded reads it there.
 //
 // The wrench of a standing animal, the hourglass and every zzz blink:
 // BLINK_MS there, BLINK_MS gone.
@@ -90,6 +93,11 @@ const FAILURES_SHOWN = 3
 
 // What the meter says, and "wait": between turns, with something to wait for.
 export type Phase = 'run' | 'halt' | 'vacant' | 'wait'
+
+// Whether the session waits for something, as the engine said when the last
+// turn of the main loop ended. Kept in the session, not in this module: a
+// reload starts the module's own variables over.
+const waiting = atom({ plugin: 'taxi-horse', key: 'isWaiting' } as const, false)
 export type Mark = '' | keyof typeof BEHIND | 'home'
 
 export function animal(level: number): string {
@@ -384,13 +392,18 @@ export const register: Register = on => {
   // What is drawn now: the picture, or why there is none. Undefined until the
   // meter has answered.
   let shown: string | undefined
-  // Whether the session waits for something, as the engine said when the last
-  // turn of the main loop ended. It stands until the next turn ends.
+  // What the session keeps as "waiting", as this copy last wrote or read it.
+  // It stands until the next turn ends.
   let isWaiting = false
 
   on('classic.Stop', async ($, e, next) => {
     if (e.agent_id === undefined) {
       isWaiting = waits(e)
+      try {
+        await update($, waiting, () => isWaiting)
+      } catch {
+        // An engine that keeps no state: this copy alone knows.
+      }
     }
 
     return next(e)
@@ -417,6 +430,12 @@ export const register: Register = on => {
       return started
     }
 
+    try {
+      // What a copy before this one was told, when a reload has loaded this one.
+      isWaiting = await read($, waiting)
+    } catch {
+      // nothing kept
+    }
     const meter = `${$.plugin.root}/taxi-horse`
     const runtime = await $.env.get('XDG_RUNTIME_DIR')
     const self = Math.floor(Math.random() * 1e9)
