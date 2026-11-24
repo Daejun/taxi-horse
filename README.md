@@ -22,8 +22,8 @@ running under the input box.
   average. Wind (`🐎💨`): it has just sped up, to 3 times the average or
   more. Fire (`🐎🔥`): the same, and to 3 times the speed the fastest animal
   starts at. Zzz (`🐎💤`): it stands, and no token has come for 10 seconds.
-- When the animal changes into another, a poof (`💥`) stands in its place
-  for a moment.
+- When the animal changes into another, or wakes up, a poof (`💥`) stands
+  in its place for a moment. Falling asleep has none.
 - The faster it runs, the more often it is redrawn, one column at a time.
 - There is no text and no number on the line.
 

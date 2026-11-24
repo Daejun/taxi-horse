@@ -19,9 +19,9 @@ import type { Register } from 'claude-code'
 // line as a notice instead, which the terminal marks with a "!".
 //
 // The picture is meter.py's render(): keep the two the same. One thing is this
-// mod's alone: when the animal changes into another, a poof is drawn in its
-// place for POOF_MS. A status line, redrawn once a second, has no frame that
-// short.
+// mod's alone: when the animal changes into another, or wakes up, a poof is
+// drawn in its place for POOF_MS. Falling asleep has none. A status line,
+// redrawn once a second, has no frame that short.
 
 const TRACK = 40
 const COIN = '🪙'
@@ -33,7 +33,8 @@ const ANIMALS: readonly string[] = [...'🐌🐢🦔🐁🐓🐖🐑🐘🐪🐕
 // What a mark draws right behind the animal: wind when it has just sped up,
 // fire when that is to a great speed, zzz when it has just stopped.
 const BEHIND = { gust: '💨', fire: '🔥', doze: '💤' } as const
-// What is drawn in place of the animal while it changes into another.
+// What is drawn in place of the animal while it changes into another or wakes
+// up.
 const POOF = '💥'
 const POOF_MS = 400
 // The shortest wait between two redraws.
@@ -75,6 +76,21 @@ export function animalColumn(dist: number, width: number = TRACK): number {
 // The animal drawn for a state: whatever it was, it sleeps as a snail.
 export function animalShown(phase: Phase, level: number): string {
   return animal(phase === 'vacant' ? 0 : level)
+}
+
+// Does going from what was drawn to this state take a poof: waking up, and
+// changing into another animal while awake. Falling asleep does not, and
+// neither does the first picture.
+export function poofs(
+  before: { phase: Phase; level: number } | undefined,
+  phase: Phase,
+  level: number,
+): boolean {
+  if (before === undefined || phase === 'vacant') {
+    return false
+  }
+
+  return before.phase === 'vacant' || animal(before.level) !== animal(level)
 }
 
 export function render(
@@ -203,10 +219,10 @@ export const register: Register = on => {
     let level = 0
     let mark: Mark = ''
     let dist = 0
-    // When the animal may move its next column, the animal last drawn, and
+    // When the animal may move its next column, the state last drawn, and
     // until when the poof of its change stays.
     let stepAt = 0
-    let drawn: string | undefined
+    let drawn: { phase: Phase; level: number } | undefined
     let poofUntil = 0
     let polledAt = 0
     let isDrawing = false
@@ -308,13 +324,13 @@ export const register: Register = on => {
           wait = stepAt - now
         }
         if (isDrawing) {
-          const kind = animalShown(phase, level)
-          if (drawn !== undefined && kind !== drawn) {
+          if (poofs(drawn, phase, level)) {
             poofUntil = now + POOF_MS
           }
-          drawn = kind
+          drawn = { phase, level }
         }
-        const isChanging = isDrawing && now < poofUntil
+        // Falling asleep cuts a poof short.
+        const isChanging = isDrawing && phase !== 'vacant' && now < poofUntil
         if (isChanging) {
           wait = Math.min(wait, poofUntil - now)
         }

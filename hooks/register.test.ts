@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { animal, animalColumn, animalShown, findPython, lastLine, parseLive, parseProbe, render } from './register'
+import { animal, animalColumn, animalShown, findPython, lastLine, parseLive, parseProbe, poofs, render } from './register'
 import type { Mark, Phase, Run } from './register'
 
 // What meter.py draws for the same state, level and distance: generated from
@@ -1779,8 +1779,22 @@ test('draws a poof in place of an animal that is changing', async () => {
   // The poof stands where the animal stood, and the coins stay.
   expect([...during].indexOf('💥')).toBe([...before].indexOf('🐘'))
   expect(during.replace('💥', '🐘')).toBe(render('run', 7, 13))
-  // Falling asleep and waking up change the animal too: to and from the snail.
   expect(animalShown('vacant', 7)).toBe('🐌')
   expect(animalShown('halt', 7)).toBe('🐘')
-  expect(render('vacant', 7, 13, '', 40, true)).not.toContain('💤')
+})
+
+test('poofs when the animal changes or wakes up, not when it falls asleep', async () => {
+  expect(poofs(undefined, 'run', 7)).toBe(false)
+  // Another animal while awake, whether it runs or stands.
+  expect(poofs({ phase: 'run', level: 7 }, 'run', 8)).toBe(true)
+  expect(poofs({ phase: 'run', level: 7 }, 'halt', 6)).toBe(true)
+  expect(poofs({ phase: 'run', level: 7 }, 'halt', 7)).toBe(false)
+  expect(poofs({ phase: 'halt', level: 7 }, 'run', 7)).toBe(false)
+  // Waking up, even as the snail it slept as.
+  expect(poofs({ phase: 'vacant', level: 0 }, 'run', 0)).toBe(true)
+  expect(poofs({ phase: 'vacant', level: 9 }, 'run', 9)).toBe(true)
+  // Falling asleep, and whatever happens to the speed while asleep.
+  expect(poofs({ phase: 'run', level: 7 }, 'vacant', 7)).toBe(false)
+  expect(poofs({ phase: 'halt', level: 7 }, 'vacant', 0)).toBe(false)
+  expect(poofs({ phase: 'vacant', level: 7 }, 'vacant', 3)).toBe(false)
 })
