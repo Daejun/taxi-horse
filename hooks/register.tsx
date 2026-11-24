@@ -5,7 +5,7 @@ import type { Register } from 'claude-code'
 //
 // meter.py counts the tokens. Once a second this mod runs "taxi-horse --state"
 // with the session id and the transcript path, and gets back "<state> <level>"
-// and, when the animal has a mark, "gust", "fire", "doze" or "home".
+// and, when the animal has a mark, "gust", "fire" or "home".
 // It finds the Python to run it with by itself, and when there is none the row
 // says so: a plugin has nothing that runs when it is installed, so this is
 // where a missing prerequisite shows.
@@ -23,7 +23,8 @@ import type { Register } from 'claude-code'
 // drawn in its place for POOF_MS. Falling asleep and going home have none. A status line,
 // redrawn once a second, has no frame that short.
 //
-// Every zzz blinks: ZZZ_MS there, ZZZ_MS gone.
+// The wrench of a standing animal and every zzz blink: BLINK_MS there,
+// BLINK_MS gone.
 //
 // The fare behind a dollar sign is what the session has cost, in US dollars,
 // since the fare before it. A stretch of less than half a cent leaves paw
@@ -44,12 +45,14 @@ const FARE_MAX = 5
 const NO_STAMPS: ReadonlyMap<number, number> = new Map()
 // One animal for each speed level, 0 to 16, slowest first.
 const ANIMALS: readonly string[] = [...'🐌🐢🦔🐁🐓🐖🐑🐘🐪🐕🐇🦘🦌🐎🐅🐆🦅']
-// What a mark draws right behind the animal: wind when it has just sped up,
-// fire when that is to a great speed, zzz when it has just stopped, and zzz
-// again when it is at home.
-const BEHIND = { gust: '💨', fire: '🔥', doze: '💤', home: '💤' } as const
-// What stands in place of an animal that is at home: no request is out and
-// the average speed is 0 too.
+// What a mark draws right behind a running animal: wind when it has just sped
+// up, fire when that is to a great speed.
+const BEHIND = { gust: '💨', fire: '🔥' } as const
+// What stands right behind an animal that stands while its tools run: it is
+// not asleep, a tool is at work.
+const TOOL = '🔧'
+// What stands in place of an animal that is at home: no turn is on and the
+// average speed is 0 too.
 const HOUSE = '🏠'
 // What is drawn in place of the animal while it changes into another or wakes
 // up.
@@ -59,8 +62,9 @@ const POOF_MS = 400
 const MIN_WAIT_MS = 20
 const POLL_MS = 1000
 const IDLE_MS = 1000
-// How long a zzz is there, and how long it is gone, as it blinks.
-const ZZZ_MS = 1000
+// How long the wrench or a zzz is there, and how long it is gone, as it
+// blinks.
+const BLINK_MS = 1000
 // How long a sign of life of another copy of this mod counts for.
 const TWIN_FRESH_MS = 2500
 // Where Python may be, in the order tried. The system's comes first: it has no
@@ -77,7 +81,7 @@ const RETRY_MS = 30000
 const FAILURES_SHOWN = 3
 
 export type Phase = 'run' | 'halt' | 'vacant'
-export type Mark = '' | keyof typeof BEHIND
+export type Mark = '' | keyof typeof BEHIND | 'home'
 
 export function animal(level: number): string {
   const index = Math.min(ANIMALS.length - 1, Math.max(0, Math.floor(level)))
@@ -212,9 +216,10 @@ export function stamped(
   return { stamps, billed }
 }
 
-// Is the zzz of a sleeping animal there at this time, or gone, as it blinks.
-export function zzzShows(now: number): boolean {
-  return Math.floor(now / ZZZ_MS) % 2 === 0
+// Is what blinks behind the animal, its wrench or its zzz, there at this time,
+// or gone.
+export function blinkShows(now: number): boolean {
+  return Math.floor(now / BLINK_MS) % 2 === 0
 }
 
 // stamps: an eaten coin at such a column leaves a dollar sign and the fare of
@@ -226,8 +231,8 @@ export function zzzShows(now: number): boolean {
 // lap before turns back into coins one coin at a time. That is halfway between
 // two coins: nothing else on the line changes at that moment.
 //
-// hasZzz: false while a zzz is gone, as it blinks. Its place stays empty: what
-// it hides does not come back meanwhile.
+// hasBlink: false while the wrench or the zzz is gone, as it blinks. Its place
+// stays empty: what it hides does not come back meanwhile.
 export function render(
   phase: Phase,
   level: number,
@@ -236,7 +241,7 @@ export function render(
   width: number = TRACK,
   isChanging: boolean = false,
   stamps: ReadonlyMap<number, number> = NO_STAMPS,
-  hasZzz: boolean = true,
+  hasBlink: boolean = true,
 ): string {
   const x = animalColumn(dist, width)
   // Two-column glyphs by their left column. The animal and what is right
@@ -244,9 +249,11 @@ export function render(
   // While the animal changes there is only the poof.
   const standing = mark === 'home' ? HOUSE : animalShown(phase, level)
   const glyphs = new Map<number, string>([[x, isChanging ? POOF : standing]])
-  const behind = phase === 'vacant' ? '💤' : mark === '' ? undefined : BEHIND[mark]
+  // Asleep its zzz, standing its wrench, running the wind or fire of its mark.
+  const behind =
+    phase === 'vacant' ? '💤' : phase === 'halt' ? TOOL : mark === '' || mark === 'home' ? undefined : BEHIND[mark]
   if (behind !== undefined && !isChanging) {
-    glyphs.set(x + 2, hasZzz || behind !== '💤' ? behind : '  ')
+    glyphs.set(x + 2, hasBlink || phase === 'run' ? behind : '  ')
   }
   const taken = [...glyphs.keys()]
   // One-column characters by their first column.
@@ -288,7 +295,7 @@ export function parseLive(text: string): { phase: Phase; level: number; mark: Ma
   }
 
   // A mark this copy does not know is left out, not refused.
-  const known = mark === 'gust' || mark === 'fire' || mark === 'doze' || mark === 'home'
+  const known = mark === 'gust' || mark === 'fire' || mark === 'home'
 
   return { phase, level: n, mark: known ? mark : '' }
 }
@@ -508,14 +515,14 @@ export const register: Register = on => {
         if (isChanging) {
           wait = Math.min(wait, poofUntil - now)
         }
-        // A zzz is redrawn as it comes and goes.
-        const hasZzz = zzzShows(now)
-        if (isDrawing && (phase === 'vacant' || mark === 'home' || mark === 'doze')) {
-          wait = Math.min(wait, ZZZ_MS - (now % ZZZ_MS))
+        // The wrench and a zzz are redrawn as they come and go.
+        const hasBlink = blinkShows(now)
+        if (isDrawing && phase !== 'run') {
+          wait = Math.min(wait, BLINK_MS - (now % BLINK_MS))
         }
         wait = Math.max(MIN_WAIT_MS, wait)
         const line = isDrawing
-          ? render(phase, level, dist, mark, TRACK, isChanging, fares.stamps, hasZzz)
+          ? render(phase, level, dist, mark, TRACK, isChanging, fares.stamps, hasBlink)
           : problem
         if (line !== shown) {
           shown = line

@@ -13,7 +13,7 @@ import {
   poofs,
   render,
   stamped,
-  zzzShows,
+  blinkShows,
 } from './register'
 import type { Fares, Mark, Phase, Run } from './register'
 
@@ -505,481 +505,481 @@ const LINES: readonly (readonly [Phase, number, number, string])[] = [
   'halt',
   0,
   0,
-  '🪙        🪙        🪙        🪙        🪙    🐌'
+  '🪙        🪙        🪙        🪙        🪙    🐌🔧'
  ],
  [
   'halt',
   0,
   1,
-  '🪙        🪙        🪙        🪙        🪙   🐌'
+  '🪙        🪙        🪙        🪙        🪙   🐌🔧'
  ],
  [
   'halt',
   0,
   5,
-  '🪙        🪙        🪙        🪙         🐌'
+  '🪙        🪙        🪙        🪙         🐌🔧'
  ],
  [
   'halt',
   0,
   6,
-  '🪙        🪙        🪙        🪙        🐌'
+  '🪙        🪙        🪙        🪙        🐌🔧'
  ],
  [
   'halt',
   0,
   7,
-  '🪙        🪙        🪙        🪙       🐌'
+  '🪙        🪙        🪙        🪙       🐌🔧'
  ],
  [
   'halt',
   0,
   8,
-  '🪙        🪙        🪙        🪙      🐌'
+  '🪙        🪙        🪙        🪙      🐌🔧'
  ],
  [
   'halt',
   0,
   13,
-  '🪙        🪙        🪙        🪙 🐌'
+  '🪙        🪙        🪙        🪙 🐌🔧'
  ],
  [
   'halt',
   0,
   14,
-  '🪙        🪙        🪙        🪙🐌'
+  '🪙        🪙        🪙        🪙🐌🔧'
  ],
  [
   'halt',
   0,
   15,
-  '🪙        🪙        🪙         🐌'
+  '🪙        🪙        🪙         🐌🔧'
  ],
  [
   'halt',
   0,
   22,
-  '🪙        🪙        🪙  🐌'
+  '🪙        🪙        🪙  🐌🔧'
  ],
  [
   'halt',
   0,
   23,
-  '🪙        🪙        🪙 🐌'
+  '🪙        🪙        🪙 🐌🔧'
  ],
  [
   'halt',
   0,
   29,
-  '🪙        🪙     🐌'
+  '🪙        🪙     🐌🔧'
  ],
  [
   'halt',
   0,
   36,
-  '🪙        🐌'
+  '🪙        🐌🔧'
  ],
  [
   'halt',
   0,
   37,
-  '🪙       🐌'
+  '🪙       🐌🔧'
  ],
  [
   'halt',
   0,
   38,
-  '🪙      🐌'
+  '🪙      🐌🔧'
  ],
  [
   'halt',
   0,
   77,
-  '🪙        🪙   🐌'
+  '🪙        🪙   🐌🔧'
  ],
  [
   'halt',
   3,
   0,
-  '🪙        🪙        🪙        🪙        🪙    🐁'
+  '🪙        🪙        🪙        🪙        🪙    🐁🔧'
  ],
  [
   'halt',
   3,
   1,
-  '🪙        🪙        🪙        🪙        🪙   🐁'
+  '🪙        🪙        🪙        🪙        🪙   🐁🔧'
  ],
  [
   'halt',
   3,
   5,
-  '🪙        🪙        🪙        🪙         🐁'
+  '🪙        🪙        🪙        🪙         🐁🔧'
  ],
  [
   'halt',
   3,
   6,
-  '🪙        🪙        🪙        🪙        🐁'
+  '🪙        🪙        🪙        🪙        🐁🔧'
  ],
  [
   'halt',
   3,
   7,
-  '🪙        🪙        🪙        🪙       🐁'
+  '🪙        🪙        🪙        🪙       🐁🔧'
  ],
  [
   'halt',
   3,
   8,
-  '🪙        🪙        🪙        🪙      🐁'
+  '🪙        🪙        🪙        🪙      🐁🔧'
  ],
  [
   'halt',
   3,
   13,
-  '🪙        🪙        🪙        🪙 🐁'
+  '🪙        🪙        🪙        🪙 🐁🔧'
  ],
  [
   'halt',
   3,
   14,
-  '🪙        🪙        🪙        🪙🐁'
+  '🪙        🪙        🪙        🪙🐁🔧'
  ],
  [
   'halt',
   3,
   15,
-  '🪙        🪙        🪙         🐁'
+  '🪙        🪙        🪙         🐁🔧'
  ],
  [
   'halt',
   3,
   22,
-  '🪙        🪙        🪙  🐁'
+  '🪙        🪙        🪙  🐁🔧'
  ],
  [
   'halt',
   3,
   23,
-  '🪙        🪙        🪙 🐁'
+  '🪙        🪙        🪙 🐁🔧'
  ],
  [
   'halt',
   3,
   29,
-  '🪙        🪙     🐁'
+  '🪙        🪙     🐁🔧'
  ],
  [
   'halt',
   3,
   36,
-  '🪙        🐁'
+  '🪙        🐁🔧'
  ],
  [
   'halt',
   3,
   37,
-  '🪙       🐁'
+  '🪙       🐁🔧'
  ],
  [
   'halt',
   3,
   38,
-  '🪙      🐁'
+  '🪙      🐁🔧'
  ],
  [
   'halt',
   3,
   77,
-  '🪙        🪙   🐁'
+  '🪙        🪙   🐁🔧'
  ],
  [
   'halt',
   7,
   0,
-  '🪙        🪙        🪙        🪙        🪙    🐘'
+  '🪙        🪙        🪙        🪙        🪙    🐘🔧'
  ],
  [
   'halt',
   7,
   1,
-  '🪙        🪙        🪙        🪙        🪙   🐘'
+  '🪙        🪙        🪙        🪙        🪙   🐘🔧'
  ],
  [
   'halt',
   7,
   5,
-  '🪙        🪙        🪙        🪙         🐘'
+  '🪙        🪙        🪙        🪙         🐘🔧'
  ],
  [
   'halt',
   7,
   6,
-  '🪙        🪙        🪙        🪙        🐘'
+  '🪙        🪙        🪙        🪙        🐘🔧'
  ],
  [
   'halt',
   7,
   7,
-  '🪙        🪙        🪙        🪙       🐘'
+  '🪙        🪙        🪙        🪙       🐘🔧'
  ],
  [
   'halt',
   7,
   8,
-  '🪙        🪙        🪙        🪙      🐘'
+  '🪙        🪙        🪙        🪙      🐘🔧'
  ],
  [
   'halt',
   7,
   13,
-  '🪙        🪙        🪙        🪙 🐘'
+  '🪙        🪙        🪙        🪙 🐘🔧'
  ],
  [
   'halt',
   7,
   14,
-  '🪙        🪙        🪙        🪙🐘'
+  '🪙        🪙        🪙        🪙🐘🔧'
  ],
  [
   'halt',
   7,
   15,
-  '🪙        🪙        🪙         🐘'
+  '🪙        🪙        🪙         🐘🔧'
  ],
  [
   'halt',
   7,
   22,
-  '🪙        🪙        🪙  🐘'
+  '🪙        🪙        🪙  🐘🔧'
  ],
  [
   'halt',
   7,
   23,
-  '🪙        🪙        🪙 🐘'
+  '🪙        🪙        🪙 🐘🔧'
  ],
  [
   'halt',
   7,
   29,
-  '🪙        🪙     🐘'
+  '🪙        🪙     🐘🔧'
  ],
  [
   'halt',
   7,
   36,
-  '🪙        🐘'
+  '🪙        🐘🔧'
  ],
  [
   'halt',
   7,
   37,
-  '🪙       🐘'
+  '🪙       🐘🔧'
  ],
  [
   'halt',
   7,
   38,
-  '🪙      🐘'
+  '🪙      🐘🔧'
  ],
  [
   'halt',
   7,
   77,
-  '🪙        🪙   🐘'
+  '🪙        🪙   🐘🔧'
  ],
  [
   'halt',
   12,
   0,
-  '🪙        🪙        🪙        🪙        🪙    🦌'
+  '🪙        🪙        🪙        🪙        🪙    🦌🔧'
  ],
  [
   'halt',
   12,
   1,
-  '🪙        🪙        🪙        🪙        🪙   🦌'
+  '🪙        🪙        🪙        🪙        🪙   🦌🔧'
  ],
  [
   'halt',
   12,
   5,
-  '🪙        🪙        🪙        🪙         🦌'
+  '🪙        🪙        🪙        🪙         🦌🔧'
  ],
  [
   'halt',
   12,
   6,
-  '🪙        🪙        🪙        🪙        🦌'
+  '🪙        🪙        🪙        🪙        🦌🔧'
  ],
  [
   'halt',
   12,
   7,
-  '🪙        🪙        🪙        🪙       🦌'
+  '🪙        🪙        🪙        🪙       🦌🔧'
  ],
  [
   'halt',
   12,
   8,
-  '🪙        🪙        🪙        🪙      🦌'
+  '🪙        🪙        🪙        🪙      🦌🔧'
  ],
  [
   'halt',
   12,
   13,
-  '🪙        🪙        🪙        🪙 🦌'
+  '🪙        🪙        🪙        🪙 🦌🔧'
  ],
  [
   'halt',
   12,
   14,
-  '🪙        🪙        🪙        🪙🦌'
+  '🪙        🪙        🪙        🪙🦌🔧'
  ],
  [
   'halt',
   12,
   15,
-  '🪙        🪙        🪙         🦌'
+  '🪙        🪙        🪙         🦌🔧'
  ],
  [
   'halt',
   12,
   22,
-  '🪙        🪙        🪙  🦌'
+  '🪙        🪙        🪙  🦌🔧'
  ],
  [
   'halt',
   12,
   23,
-  '🪙        🪙        🪙 🦌'
+  '🪙        🪙        🪙 🦌🔧'
  ],
  [
   'halt',
   12,
   29,
-  '🪙        🪙     🦌'
+  '🪙        🪙     🦌🔧'
  ],
  [
   'halt',
   12,
   36,
-  '🪙        🦌'
+  '🪙        🦌🔧'
  ],
  [
   'halt',
   12,
   37,
-  '🪙       🦌'
+  '🪙       🦌🔧'
  ],
  [
   'halt',
   12,
   38,
-  '🪙      🦌'
+  '🪙      🦌🔧'
  ],
  [
   'halt',
   12,
   77,
-  '🪙        🪙   🦌'
+  '🪙        🪙   🦌🔧'
  ],
  [
   'halt',
   16,
   0,
-  '🪙        🪙        🪙        🪙        🪙    🦅'
+  '🪙        🪙        🪙        🪙        🪙    🦅🔧'
  ],
  [
   'halt',
   16,
   1,
-  '🪙        🪙        🪙        🪙        🪙   🦅'
+  '🪙        🪙        🪙        🪙        🪙   🦅🔧'
  ],
  [
   'halt',
   16,
   5,
-  '🪙        🪙        🪙        🪙         🦅'
+  '🪙        🪙        🪙        🪙         🦅🔧'
  ],
  [
   'halt',
   16,
   6,
-  '🪙        🪙        🪙        🪙        🦅'
+  '🪙        🪙        🪙        🪙        🦅🔧'
  ],
  [
   'halt',
   16,
   7,
-  '🪙        🪙        🪙        🪙       🦅'
+  '🪙        🪙        🪙        🪙       🦅🔧'
  ],
  [
   'halt',
   16,
   8,
-  '🪙        🪙        🪙        🪙      🦅'
+  '🪙        🪙        🪙        🪙      🦅🔧'
  ],
  [
   'halt',
   16,
   13,
-  '🪙        🪙        🪙        🪙 🦅'
+  '🪙        🪙        🪙        🪙 🦅🔧'
  ],
  [
   'halt',
   16,
   14,
-  '🪙        🪙        🪙        🪙🦅'
+  '🪙        🪙        🪙        🪙🦅🔧'
  ],
  [
   'halt',
   16,
   15,
-  '🪙        🪙        🪙         🦅'
+  '🪙        🪙        🪙         🦅🔧'
  ],
  [
   'halt',
   16,
   22,
-  '🪙        🪙        🪙  🦅'
+  '🪙        🪙        🪙  🦅🔧'
  ],
  [
   'halt',
   16,
   23,
-  '🪙        🪙        🪙 🦅'
+  '🪙        🪙        🪙 🦅🔧'
  ],
  [
   'halt',
   16,
   29,
-  '🪙        🪙     🦅'
+  '🪙        🪙     🦅🔧'
  ],
  [
   'halt',
   16,
   36,
-  '🪙        🦅'
+  '🪙        🦅🔧'
  ],
  [
   'halt',
   16,
   37,
-  '🪙       🦅'
+  '🪙       🦅🔧'
  ],
  [
   'halt',
   16,
   38,
-  '🪙      🦅'
+  '🪙      🦅🔧'
  ],
  [
   'halt',
   16,
   77,
-  '🪙        🪙   🦅'
+  '🪙        🪙   🦅🔧'
  ],
  [
   'vacant',
@@ -1490,7 +1490,7 @@ test('reads what meter.py leaves and refuses anything else', async () => {
   expect(parseLive('vacant 0\n')).toEqual({ phase: 'vacant', level: 0, mark: '' })
   expect(parseLive('run 7 gust\n')).toEqual({ phase: 'run', level: 7, mark: 'gust' })
   expect(parseLive('run 16 fire\n')).toEqual({ phase: 'run', level: 16, mark: 'fire' })
-  expect(parseLive('halt 3 doze\n')).toEqual({ phase: 'halt', level: 3, mark: 'doze' })
+  expect(parseLive('halt 3\n')).toEqual({ phase: 'halt', level: 3, mark: '' })
   expect(parseLive('vacant 0 home\n')).toEqual({ phase: 'vacant', level: 0, mark: 'home' })
   expect(parseLive('run 7 sparkle')).toEqual({ phase: 'run', level: 7, mark: '' })
   expect(parseLive('')).toBeUndefined()
@@ -1649,48 +1649,12 @@ const MARKED: readonly (readonly [Phase, number, number, Mark, string])[] = [
   ['run', 16, 38, 'fire', '🪙      🦅🔥'],
   ['run', 16, 39, 'fire', '🪙     🦅🔥'],
   ['run', 16, 77, 'fire', '🪙        🪙   🦅🔥'],
-  ['halt', 0, 0, 'doze', '🪙        🪙        🪙        🪙        🪙    🐌💤'],
-  ['halt', 0, 1, 'doze', '🪙        🪙        🪙        🪙        🪙   🐌💤'],
-  ['halt', 0, 5, 'doze', '🪙        🪙        🪙        🪙         🐌💤'],
-  ['halt', 0, 6, 'doze', '🪙        🪙        🪙        🪙        🐌💤'],
-  ['halt', 0, 7, 'doze', '🪙        🪙        🪙        🪙       🐌💤'],
-  ['halt', 0, 13, 'doze', '🪙        🪙        🪙        🪙 🐌💤'],
-  ['halt', 0, 14, 'doze', '🪙        🪙        🪙        🪙🐌💤'],
-  ['halt', 0, 22, 'doze', '🪙        🪙        🪙  🐌💤'],
-  ['halt', 0, 30, 'doze', '🪙        🪙    🐌💤'],
-  ['halt', 0, 36, 'doze', '🪙        🐌💤'],
-  ['halt', 0, 37, 'doze', '🪙       🐌💤'],
-  ['halt', 0, 38, 'doze', '🪙      🐌💤'],
-  ['halt', 0, 39, 'doze', '🪙     🐌💤'],
-  ['halt', 0, 77, 'doze', '🪙        🪙   🐌💤'],
-  ['halt', 7, 0, 'doze', '🪙        🪙        🪙        🪙        🪙    🐘💤'],
-  ['halt', 7, 1, 'doze', '🪙        🪙        🪙        🪙        🪙   🐘💤'],
-  ['halt', 7, 5, 'doze', '🪙        🪙        🪙        🪙         🐘💤'],
-  ['halt', 7, 6, 'doze', '🪙        🪙        🪙        🪙        🐘💤'],
-  ['halt', 7, 7, 'doze', '🪙        🪙        🪙        🪙       🐘💤'],
-  ['halt', 7, 13, 'doze', '🪙        🪙        🪙        🪙 🐘💤'],
-  ['halt', 7, 14, 'doze', '🪙        🪙        🪙        🪙🐘💤'],
-  ['halt', 7, 22, 'doze', '🪙        🪙        🪙  🐘💤'],
-  ['halt', 7, 30, 'doze', '🪙        🪙    🐘💤'],
-  ['halt', 7, 36, 'doze', '🪙        🐘💤'],
-  ['halt', 7, 37, 'doze', '🪙       🐘💤'],
-  ['halt', 7, 38, 'doze', '🪙      🐘💤'],
-  ['halt', 7, 39, 'doze', '🪙     🐘💤'],
-  ['halt', 7, 77, 'doze', '🪙        🪙   🐘💤'],
-  ['halt', 16, 0, 'doze', '🪙        🪙        🪙        🪙        🪙    🦅💤'],
-  ['halt', 16, 1, 'doze', '🪙        🪙        🪙        🪙        🪙   🦅💤'],
-  ['halt', 16, 5, 'doze', '🪙        🪙        🪙        🪙         🦅💤'],
-  ['halt', 16, 6, 'doze', '🪙        🪙        🪙        🪙        🦅💤'],
-  ['halt', 16, 7, 'doze', '🪙        🪙        🪙        🪙       🦅💤'],
-  ['halt', 16, 13, 'doze', '🪙        🪙        🪙        🪙 🦅💤'],
-  ['halt', 16, 14, 'doze', '🪙        🪙        🪙        🪙🦅💤'],
-  ['halt', 16, 22, 'doze', '🪙        🪙        🪙  🦅💤'],
-  ['halt', 16, 30, 'doze', '🪙        🪙    🦅💤'],
-  ['halt', 16, 36, 'doze', '🪙        🦅💤'],
-  ['halt', 16, 37, 'doze', '🪙       🦅💤'],
-  ['halt', 16, 38, 'doze', '🪙      🦅💤'],
-  ['halt', 16, 39, 'doze', '🪙     🦅💤'],
-  ['halt', 16, 77, 'doze', '🪙        🪙   🦅💤'],
+  ['halt', 0, 30, '', '🪙        🪙    🐌🔧'],
+  ['halt', 0, 39, '', '🪙     🐌🔧'],
+  ['halt', 7, 30, '', '🪙        🪙    🐘🔧'],
+  ['halt', 7, 39, '', '🪙     🐘🔧'],
+  ['halt', 16, 30, '', '🪙        🪙    🦅🔧'],
+  ['halt', 16, 39, '', '🪙     🦅🔧'],
   ['vacant', 0, 0, 'gust', '🪙        🪙        🪙        🪙        🪙    🐌💤'],
   ['vacant', 0, 1, 'gust', '🪙        🪙        🪙        🪙        🪙   🐌💤'],
   ['vacant', 0, 5, 'gust', '🪙        🪙        🪙        🪙         🐌💤'],
@@ -1733,48 +1697,6 @@ const MARKED: readonly (readonly [Phase, number, number, Mark, string])[] = [
   ['vacant', 16, 38, 'gust', '🪙      🐌💤'],
   ['vacant', 16, 39, 'gust', '🪙     🐌💤'],
   ['vacant', 16, 77, 'gust', '🪙        🪙   🐌💤'],
-  ['vacant', 0, 0, 'doze', '🪙        🪙        🪙        🪙        🪙    🐌💤'],
-  ['vacant', 0, 1, 'doze', '🪙        🪙        🪙        🪙        🪙   🐌💤'],
-  ['vacant', 0, 5, 'doze', '🪙        🪙        🪙        🪙         🐌💤'],
-  ['vacant', 0, 6, 'doze', '🪙        🪙        🪙        🪙        🐌💤'],
-  ['vacant', 0, 7, 'doze', '🪙        🪙        🪙        🪙       🐌💤'],
-  ['vacant', 0, 13, 'doze', '🪙        🪙        🪙        🪙 🐌💤'],
-  ['vacant', 0, 14, 'doze', '🪙        🪙        🪙        🪙🐌💤'],
-  ['vacant', 0, 22, 'doze', '🪙        🪙        🪙  🐌💤'],
-  ['vacant', 0, 30, 'doze', '🪙        🪙    🐌💤'],
-  ['vacant', 0, 36, 'doze', '🪙        🐌💤'],
-  ['vacant', 0, 37, 'doze', '🪙       🐌💤'],
-  ['vacant', 0, 38, 'doze', '🪙      🐌💤'],
-  ['vacant', 0, 39, 'doze', '🪙     🐌💤'],
-  ['vacant', 0, 77, 'doze', '🪙        🪙   🐌💤'],
-  ['vacant', 7, 0, 'doze', '🪙        🪙        🪙        🪙        🪙    🐌💤'],
-  ['vacant', 7, 1, 'doze', '🪙        🪙        🪙        🪙        🪙   🐌💤'],
-  ['vacant', 7, 5, 'doze', '🪙        🪙        🪙        🪙         🐌💤'],
-  ['vacant', 7, 6, 'doze', '🪙        🪙        🪙        🪙        🐌💤'],
-  ['vacant', 7, 7, 'doze', '🪙        🪙        🪙        🪙       🐌💤'],
-  ['vacant', 7, 13, 'doze', '🪙        🪙        🪙        🪙 🐌💤'],
-  ['vacant', 7, 14, 'doze', '🪙        🪙        🪙        🪙🐌💤'],
-  ['vacant', 7, 22, 'doze', '🪙        🪙        🪙  🐌💤'],
-  ['vacant', 7, 30, 'doze', '🪙        🪙    🐌💤'],
-  ['vacant', 7, 36, 'doze', '🪙        🐌💤'],
-  ['vacant', 7, 37, 'doze', '🪙       🐌💤'],
-  ['vacant', 7, 38, 'doze', '🪙      🐌💤'],
-  ['vacant', 7, 39, 'doze', '🪙     🐌💤'],
-  ['vacant', 7, 77, 'doze', '🪙        🪙   🐌💤'],
-  ['vacant', 16, 0, 'doze', '🪙        🪙        🪙        🪙        🪙    🐌💤'],
-  ['vacant', 16, 1, 'doze', '🪙        🪙        🪙        🪙        🪙   🐌💤'],
-  ['vacant', 16, 5, 'doze', '🪙        🪙        🪙        🪙         🐌💤'],
-  ['vacant', 16, 6, 'doze', '🪙        🪙        🪙        🪙        🐌💤'],
-  ['vacant', 16, 7, 'doze', '🪙        🪙        🪙        🪙       🐌💤'],
-  ['vacant', 16, 13, 'doze', '🪙        🪙        🪙        🪙 🐌💤'],
-  ['vacant', 16, 14, 'doze', '🪙        🪙        🪙        🪙🐌💤'],
-  ['vacant', 16, 22, 'doze', '🪙        🪙        🪙  🐌💤'],
-  ['vacant', 16, 30, 'doze', '🪙        🪙    🐌💤'],
-  ['vacant', 16, 36, 'doze', '🪙        🐌💤'],
-  ['vacant', 16, 37, 'doze', '🪙       🐌💤'],
-  ['vacant', 16, 38, 'doze', '🪙      🐌💤'],
-  ['vacant', 16, 39, 'doze', '🪙     🐌💤'],
-  ['vacant', 16, 77, 'doze', '🪙        🪙   🐌💤'],
   ['vacant', 0, 0, 'home', '🪙        🪙        🪙        🪙        🪙    🏠💤'],
   ['vacant', 0, 1, 'home', '🪙        🪙        🪙        🪙        🪙   🏠💤'],
   ['vacant', 0, 5, 'home', '🪙        🪙        🪙        🪙         🏠💤'],
@@ -1817,59 +1739,22 @@ const MARKED: readonly (readonly [Phase, number, number, Mark, string])[] = [
   ['vacant', 16, 38, 'home', '🪙      🏠💤'],
   ['vacant', 16, 39, 'home', '🪙     🏠💤'],
   ['vacant', 16, 77, 'home', '🪙        🪙   🏠💤'],
-  ['halt', 0, 0, 'home', '🪙        🪙        🪙        🪙        🪙    🏠💤'],
-  ['halt', 0, 1, 'home', '🪙        🪙        🪙        🪙        🪙   🏠💤'],
-  ['halt', 0, 5, 'home', '🪙        🪙        🪙        🪙         🏠💤'],
-  ['halt', 0, 6, 'home', '🪙        🪙        🪙        🪙        🏠💤'],
-  ['halt', 0, 7, 'home', '🪙        🪙        🪙        🪙       🏠💤'],
-  ['halt', 0, 13, 'home', '🪙        🪙        🪙        🪙 🏠💤'],
-  ['halt', 0, 14, 'home', '🪙        🪙        🪙        🪙🏠💤'],
-  ['halt', 0, 22, 'home', '🪙        🪙        🪙  🏠💤'],
-  ['halt', 0, 30, 'home', '🪙        🪙    🏠💤'],
-  ['halt', 0, 36, 'home', '🪙        🏠💤'],
-  ['halt', 0, 37, 'home', '🪙       🏠💤'],
-  ['halt', 0, 38, 'home', '🪙      🏠💤'],
-  ['halt', 0, 39, 'home', '🪙     🏠💤'],
-  ['halt', 0, 77, 'home', '🪙        🪙   🏠💤'],
-  ['halt', 7, 0, 'home', '🪙        🪙        🪙        🪙        🪙    🏠💤'],
-  ['halt', 7, 1, 'home', '🪙        🪙        🪙        🪙        🪙   🏠💤'],
-  ['halt', 7, 5, 'home', '🪙        🪙        🪙        🪙         🏠💤'],
-  ['halt', 7, 6, 'home', '🪙        🪙        🪙        🪙        🏠💤'],
-  ['halt', 7, 7, 'home', '🪙        🪙        🪙        🪙       🏠💤'],
-  ['halt', 7, 13, 'home', '🪙        🪙        🪙        🪙 🏠💤'],
-  ['halt', 7, 14, 'home', '🪙        🪙        🪙        🪙🏠💤'],
-  ['halt', 7, 22, 'home', '🪙        🪙        🪙  🏠💤'],
-  ['halt', 7, 30, 'home', '🪙        🪙    🏠💤'],
-  ['halt', 7, 36, 'home', '🪙        🏠💤'],
-  ['halt', 7, 37, 'home', '🪙       🏠💤'],
-  ['halt', 7, 38, 'home', '🪙      🏠💤'],
-  ['halt', 7, 39, 'home', '🪙     🏠💤'],
-  ['halt', 7, 77, 'home', '🪙        🪙   🏠💤'],
-  ['halt', 16, 0, 'home', '🪙        🪙        🪙        🪙        🪙    🏠💤'],
-  ['halt', 16, 1, 'home', '🪙        🪙        🪙        🪙        🪙   🏠💤'],
-  ['halt', 16, 5, 'home', '🪙        🪙        🪙        🪙         🏠💤'],
-  ['halt', 16, 6, 'home', '🪙        🪙        🪙        🪙        🏠💤'],
-  ['halt', 16, 7, 'home', '🪙        🪙        🪙        🪙       🏠💤'],
-  ['halt', 16, 13, 'home', '🪙        🪙        🪙        🪙 🏠💤'],
-  ['halt', 16, 14, 'home', '🪙        🪙        🪙        🪙🏠💤'],
-  ['halt', 16, 22, 'home', '🪙        🪙        🪙  🏠💤'],
-  ['halt', 16, 30, 'home', '🪙        🪙    🏠💤'],
-  ['halt', 16, 36, 'home', '🪙        🏠💤'],
-  ['halt', 16, 37, 'home', '🪙       🏠💤'],
-  ['halt', 16, 38, 'home', '🪙      🏠💤'],
-  ['halt', 16, 39, 'home', '🪙     🏠💤'],
-  ['halt', 16, 77, 'home', '🪙        🪙   🏠💤'],
 ]
 
-test('draws wind, fire, zzz and the house as meter.py does', async () => {
+test('draws wind, fire, the wrench, zzz and the house as meter.py does', async () => {
   for (const [phase, level, dist, mark, line] of MARKED) {
     expect(render(phase, level, dist, mark)).toBe(line)
   }
   expect(render('vacant', 9, 13, 'home')).toContain('🏠💤')
-  expect(render('halt', 9, 13, 'home')).not.toContain(animal(9))
+  expect(render('vacant', 9, 13, 'home')).not.toContain(animal(0))
   expect(render('run', 7, 13, 'gust')).toContain('🐘💨')
   expect(render('run', 7, 13, 'fire')).toContain('🐘🔥')
-  expect(render('halt', 7, 13, 'doze')).toContain('🐘💤')
+  // Standing, it has its wrench as the animal it is: it is not asleep.
+  expect(render('halt', 7, 13)).toContain('🐘🔧')
+  expect(render('halt', 0, 13)).toContain('🐌🔧')
+  expect(render('halt', 0, 13)).not.toContain('💤')
+  expect(render('run', 7, 13)).not.toContain('🔧')
+  expect(render('vacant', 7, 13)).not.toContain('🔧')
 })
 
 test('draws a poof in place of an animal that is changing', async () => {
@@ -1891,18 +1776,18 @@ test('poofs when the animal changes or wakes up, not when it falls asleep', asyn
   expect(poofs({ phase: 'run', level: 7, mark: '' }, 'run', 8)).toBe(true)
   expect(poofs({ phase: 'run', level: 7, mark: 'gust' }, 'halt', 6)).toBe(true)
   expect(poofs({ phase: 'run', level: 7, mark: '' }, 'halt', 7)).toBe(false)
-  expect(poofs({ phase: 'halt', level: 7, mark: 'doze' }, 'run', 7)).toBe(false)
+  expect(poofs({ phase: 'halt', level: 7, mark: '' }, 'run', 7)).toBe(false)
+  // A tool that runs on until the average is 0: the animal becomes a snail.
+  expect(poofs({ phase: 'halt', level: 3, mark: '' }, 'halt', 0)).toBe(true)
   // Waking up, even as the snail it slept as, and coming out of the house.
   expect(poofs({ phase: 'vacant', level: 0, mark: '' }, 'run', 0)).toBe(true)
   expect(poofs({ phase: 'vacant', level: 9, mark: '' }, 'run', 9)).toBe(true)
   expect(poofs({ phase: 'vacant', level: 0, mark: 'home' }, 'run', 0)).toBe(true)
-  expect(poofs({ phase: 'halt', level: 0, mark: 'home' }, 'run', 0)).toBe(true)
   // Falling asleep, going home, and whatever happens to the speed meanwhile.
   expect(poofs({ phase: 'run', level: 7, mark: '' }, 'vacant', 7)).toBe(false)
   expect(poofs({ phase: 'halt', level: 7, mark: '' }, 'vacant', 0)).toBe(false)
   expect(poofs({ phase: 'vacant', level: 7, mark: '' }, 'vacant', 3)).toBe(false)
   expect(poofs({ phase: 'vacant', level: 3, mark: '' }, 'vacant', 0, 'home')).toBe(false)
-  expect(poofs({ phase: 'halt', level: 3, mark: 'doze' }, 'halt', 0, 'home')).toBe(false)
 })
 
 // The same again with what the animal has left, behind it on this lap and
@@ -1988,45 +1873,45 @@ const STAMPED: readonly (readonly [Phase, number, number, Mark, string])[] = [
   ['run', 13, 36, 'gust', '🪙        🐎💨      💲1.31    💲1.12    💲1.07'],
   ['run', 13, 37, 'gust', '🪙       🐎💨       💲1.31    💲1.12    💲1.07'],
   ['run', 13, 38, 'gust', '🪙      🐎💨        💲1.31    💲1.12    💲1.07'],
-  ['halt', 7, 0, 'doze', '💲1.50    💲1.40    💲1.31    💲1.12    🪙    🐘💤'],
-  ['halt', 7, 1, 'doze', '💲1.50    💲1.40    💲1.31    🪙        🪙   🐘💤'],
-  ['halt', 7, 2, 'doze', '💲1.50    💲1.40    💲1.31    🪙        🪙  🐘💤'],
-  ['halt', 7, 3, 'doze', '💲1.50    💲1.40    💲1.31    🪙        🪙 🐘💤'],
-  ['halt', 7, 4, 'doze', '💲1.50    💲1.40    💲1.31    🪙        🪙🐘💤'],
-  ['halt', 7, 5, 'doze', '💲1.50    💲1.40    💲1.31    🪙         🐘💤'],
-  ['halt', 7, 6, 'doze', '💲1.50    💲1.40    💲1.31    🪙        🐘💤'],
-  ['halt', 7, 7, 'doze', '💲1.50    💲1.40    💲1.31    🪙       🐘💤'],
-  ['halt', 7, 8, 'doze', '💲1.50    💲1.40    💲1.31    🪙      🐘💤'],
-  ['halt', 7, 9, 'doze', '💲1.50    💲1.40    💲1.31    🪙     🐘💤'],
-  ['halt', 7, 10, 'doze', '💲1.50    💲1.40    💲1.31    🪙    🐘💤💲1.07'],
-  ['halt', 7, 11, 'doze', '💲1.50    💲1.40    🪙        🪙   🐘💤 💲1.07'],
-  ['halt', 7, 12, 'doze', '💲1.50    💲1.40    🪙        🪙  🐘💤  💲1.07'],
-  ['halt', 7, 13, 'doze', '💲1.50    💲1.40    🪙        🪙 🐘💤   💲1.07'],
-  ['halt', 7, 14, 'doze', '💲1.50    💲1.40    🪙        🪙🐘💤    💲1.07'],
-  ['halt', 7, 15, 'doze', '💲1.50    💲1.40    🪙         🐘💤     💲1.07'],
-  ['halt', 7, 16, 'doze', '💲1.50    💲1.40    🪙        🐘💤      💲1.07'],
-  ['halt', 7, 17, 'doze', '💲1.50    💲1.40    🪙       🐘💤       💲1.07'],
-  ['halt', 7, 18, 'doze', '💲1.50    💲1.40    🪙      🐘💤        💲1.07'],
-  ['halt', 7, 19, 'doze', '💲1.50    💲1.40    🪙     🐘💤         💲1.07'],
-  ['halt', 7, 20, 'doze', '💲1.50    💲1.40    🪙    🐘💤💲1.12    💲1.07'],
-  ['halt', 7, 21, 'doze', '💲1.50    🪙        🪙   🐘💤 💲1.12    💲1.07'],
-  ['halt', 7, 22, 'doze', '💲1.50    🪙        🪙  🐘💤  💲1.12    💲1.07'],
-  ['halt', 7, 23, 'doze', '💲1.50    🪙        🪙 🐘💤   💲1.12    💲1.07'],
-  ['halt', 7, 24, 'doze', '💲1.50    🪙        🪙🐘💤    💲1.12    💲1.07'],
-  ['halt', 7, 25, 'doze', '💲1.50    🪙         🐘💤     💲1.12    💲1.07'],
-  ['halt', 7, 26, 'doze', '💲1.50    🪙        🐘💤      💲1.12    💲1.07'],
-  ['halt', 7, 27, 'doze', '💲1.50    🪙       🐘💤       💲1.12    💲1.07'],
-  ['halt', 7, 28, 'doze', '💲1.50    🪙      🐘💤        💲1.12    💲1.07'],
-  ['halt', 7, 29, 'doze', '💲1.50    🪙     🐘💤         💲1.12    💲1.07'],
-  ['halt', 7, 30, 'doze', '💲1.50    🪙    🐘💤💲1.31    💲1.12    💲1.07'],
-  ['halt', 7, 31, 'doze', '🪙        🪙   🐘💤 💲1.31    💲1.12    💲1.07'],
-  ['halt', 7, 32, 'doze', '🪙        🪙  🐘💤  💲1.31    💲1.12    💲1.07'],
-  ['halt', 7, 33, 'doze', '🪙        🪙 🐘💤   💲1.31    💲1.12    💲1.07'],
-  ['halt', 7, 34, 'doze', '🪙        🪙🐘💤    💲1.31    💲1.12    💲1.07'],
-  ['halt', 7, 35, 'doze', '🪙         🐘💤     💲1.31    💲1.12    💲1.07'],
-  ['halt', 7, 36, 'doze', '🪙        🐘💤      💲1.31    💲1.12    💲1.07'],
-  ['halt', 7, 37, 'doze', '🪙       🐘💤       💲1.31    💲1.12    💲1.07'],
-  ['halt', 7, 38, 'doze', '🪙      🐘💤        💲1.31    💲1.12    💲1.07'],
+  ['halt', 7, 0, '', '💲1.50    💲1.40    💲1.31    💲1.12    🪙    🐘🔧'],
+  ['halt', 7, 1, '', '💲1.50    💲1.40    💲1.31    🪙        🪙   🐘🔧'],
+  ['halt', 7, 2, '', '💲1.50    💲1.40    💲1.31    🪙        🪙  🐘🔧'],
+  ['halt', 7, 3, '', '💲1.50    💲1.40    💲1.31    🪙        🪙 🐘🔧'],
+  ['halt', 7, 4, '', '💲1.50    💲1.40    💲1.31    🪙        🪙🐘🔧'],
+  ['halt', 7, 5, '', '💲1.50    💲1.40    💲1.31    🪙         🐘🔧'],
+  ['halt', 7, 6, '', '💲1.50    💲1.40    💲1.31    🪙        🐘🔧'],
+  ['halt', 7, 7, '', '💲1.50    💲1.40    💲1.31    🪙       🐘🔧'],
+  ['halt', 7, 8, '', '💲1.50    💲1.40    💲1.31    🪙      🐘🔧'],
+  ['halt', 7, 9, '', '💲1.50    💲1.40    💲1.31    🪙     🐘🔧'],
+  ['halt', 7, 10, '', '💲1.50    💲1.40    💲1.31    🪙    🐘🔧💲1.07'],
+  ['halt', 7, 11, '', '💲1.50    💲1.40    🪙        🪙   🐘🔧 💲1.07'],
+  ['halt', 7, 12, '', '💲1.50    💲1.40    🪙        🪙  🐘🔧  💲1.07'],
+  ['halt', 7, 13, '', '💲1.50    💲1.40    🪙        🪙 🐘🔧   💲1.07'],
+  ['halt', 7, 14, '', '💲1.50    💲1.40    🪙        🪙🐘🔧    💲1.07'],
+  ['halt', 7, 15, '', '💲1.50    💲1.40    🪙         🐘🔧     💲1.07'],
+  ['halt', 7, 16, '', '💲1.50    💲1.40    🪙        🐘🔧      💲1.07'],
+  ['halt', 7, 17, '', '💲1.50    💲1.40    🪙       🐘🔧       💲1.07'],
+  ['halt', 7, 18, '', '💲1.50    💲1.40    🪙      🐘🔧        💲1.07'],
+  ['halt', 7, 19, '', '💲1.50    💲1.40    🪙     🐘🔧         💲1.07'],
+  ['halt', 7, 20, '', '💲1.50    💲1.40    🪙    🐘🔧💲1.12    💲1.07'],
+  ['halt', 7, 21, '', '💲1.50    🪙        🪙   🐘🔧 💲1.12    💲1.07'],
+  ['halt', 7, 22, '', '💲1.50    🪙        🪙  🐘🔧  💲1.12    💲1.07'],
+  ['halt', 7, 23, '', '💲1.50    🪙        🪙 🐘🔧   💲1.12    💲1.07'],
+  ['halt', 7, 24, '', '💲1.50    🪙        🪙🐘🔧    💲1.12    💲1.07'],
+  ['halt', 7, 25, '', '💲1.50    🪙         🐘🔧     💲1.12    💲1.07'],
+  ['halt', 7, 26, '', '💲1.50    🪙        🐘🔧      💲1.12    💲1.07'],
+  ['halt', 7, 27, '', '💲1.50    🪙       🐘🔧       💲1.12    💲1.07'],
+  ['halt', 7, 28, '', '💲1.50    🪙      🐘🔧        💲1.12    💲1.07'],
+  ['halt', 7, 29, '', '💲1.50    🪙     🐘🔧         💲1.12    💲1.07'],
+  ['halt', 7, 30, '', '💲1.50    🪙    🐘🔧💲1.31    💲1.12    💲1.07'],
+  ['halt', 7, 31, '', '🪙        🪙   🐘🔧 💲1.31    💲1.12    💲1.07'],
+  ['halt', 7, 32, '', '🪙        🪙  🐘🔧  💲1.31    💲1.12    💲1.07'],
+  ['halt', 7, 33, '', '🪙        🪙 🐘🔧   💲1.31    💲1.12    💲1.07'],
+  ['halt', 7, 34, '', '🪙        🪙🐘🔧    💲1.31    💲1.12    💲1.07'],
+  ['halt', 7, 35, '', '🪙         🐘🔧     💲1.31    💲1.12    💲1.07'],
+  ['halt', 7, 36, '', '🪙        🐘🔧      💲1.31    💲1.12    💲1.07'],
+  ['halt', 7, 37, '', '🪙       🐘🔧       💲1.31    💲1.12    💲1.07'],
+  ['halt', 7, 38, '', '🪙      🐘🔧        💲1.31    💲1.12    💲1.07'],
   ['vacant', 7, 0, '', '💲1.50    💲1.40    💲1.31    💲1.12    🪙    🐌💤'],
   ['vacant', 7, 1, '', '💲1.50    💲1.40    💲1.31    🪙        🪙   🐌💤'],
   ['vacant', 7, 2, '', '💲1.50    💲1.40    💲1.31    🪙        🪙  🐌💤'],
@@ -2066,45 +1951,6 @@ const STAMPED: readonly (readonly [Phase, number, number, Mark, string])[] = [
   ['vacant', 7, 36, '', '🪙        🐌💤      💲1.31    💲1.12    💲1.07'],
   ['vacant', 7, 37, '', '🪙       🐌💤       💲1.31    💲1.12    💲1.07'],
   ['vacant', 7, 38, '', '🪙      🐌💤        💲1.31    💲1.12    💲1.07'],
-  ['halt', 16, 0, 'home', '💲1.50    💲1.40    💲1.31    💲1.12    🪙    🏠💤'],
-  ['halt', 16, 1, 'home', '💲1.50    💲1.40    💲1.31    🪙        🪙   🏠💤'],
-  ['halt', 16, 2, 'home', '💲1.50    💲1.40    💲1.31    🪙        🪙  🏠💤'],
-  ['halt', 16, 3, 'home', '💲1.50    💲1.40    💲1.31    🪙        🪙 🏠💤'],
-  ['halt', 16, 4, 'home', '💲1.50    💲1.40    💲1.31    🪙        🪙🏠💤'],
-  ['halt', 16, 5, 'home', '💲1.50    💲1.40    💲1.31    🪙         🏠💤'],
-  ['halt', 16, 6, 'home', '💲1.50    💲1.40    💲1.31    🪙        🏠💤'],
-  ['halt', 16, 7, 'home', '💲1.50    💲1.40    💲1.31    🪙       🏠💤'],
-  ['halt', 16, 8, 'home', '💲1.50    💲1.40    💲1.31    🪙      🏠💤'],
-  ['halt', 16, 9, 'home', '💲1.50    💲1.40    💲1.31    🪙     🏠💤'],
-  ['halt', 16, 10, 'home', '💲1.50    💲1.40    💲1.31    🪙    🏠💤💲1.07'],
-  ['halt', 16, 11, 'home', '💲1.50    💲1.40    🪙        🪙   🏠💤 💲1.07'],
-  ['halt', 16, 12, 'home', '💲1.50    💲1.40    🪙        🪙  🏠💤  💲1.07'],
-  ['halt', 16, 13, 'home', '💲1.50    💲1.40    🪙        🪙 🏠💤   💲1.07'],
-  ['halt', 16, 14, 'home', '💲1.50    💲1.40    🪙        🪙🏠💤    💲1.07'],
-  ['halt', 16, 15, 'home', '💲1.50    💲1.40    🪙         🏠💤     💲1.07'],
-  ['halt', 16, 16, 'home', '💲1.50    💲1.40    🪙        🏠💤      💲1.07'],
-  ['halt', 16, 17, 'home', '💲1.50    💲1.40    🪙       🏠💤       💲1.07'],
-  ['halt', 16, 18, 'home', '💲1.50    💲1.40    🪙      🏠💤        💲1.07'],
-  ['halt', 16, 19, 'home', '💲1.50    💲1.40    🪙     🏠💤         💲1.07'],
-  ['halt', 16, 20, 'home', '💲1.50    💲1.40    🪙    🏠💤💲1.12    💲1.07'],
-  ['halt', 16, 21, 'home', '💲1.50    🪙        🪙   🏠💤 💲1.12    💲1.07'],
-  ['halt', 16, 22, 'home', '💲1.50    🪙        🪙  🏠💤  💲1.12    💲1.07'],
-  ['halt', 16, 23, 'home', '💲1.50    🪙        🪙 🏠💤   💲1.12    💲1.07'],
-  ['halt', 16, 24, 'home', '💲1.50    🪙        🪙🏠💤    💲1.12    💲1.07'],
-  ['halt', 16, 25, 'home', '💲1.50    🪙         🏠💤     💲1.12    💲1.07'],
-  ['halt', 16, 26, 'home', '💲1.50    🪙        🏠💤      💲1.12    💲1.07'],
-  ['halt', 16, 27, 'home', '💲1.50    🪙       🏠💤       💲1.12    💲1.07'],
-  ['halt', 16, 28, 'home', '💲1.50    🪙      🏠💤        💲1.12    💲1.07'],
-  ['halt', 16, 29, 'home', '💲1.50    🪙     🏠💤         💲1.12    💲1.07'],
-  ['halt', 16, 30, 'home', '💲1.50    🪙    🏠💤💲1.31    💲1.12    💲1.07'],
-  ['halt', 16, 31, 'home', '🪙        🪙   🏠💤 💲1.31    💲1.12    💲1.07'],
-  ['halt', 16, 32, 'home', '🪙        🪙  🏠💤  💲1.31    💲1.12    💲1.07'],
-  ['halt', 16, 33, 'home', '🪙        🪙 🏠💤   💲1.31    💲1.12    💲1.07'],
-  ['halt', 16, 34, 'home', '🪙        🪙🏠💤    💲1.31    💲1.12    💲1.07'],
-  ['halt', 16, 35, 'home', '🪙         🏠💤     💲1.31    💲1.12    💲1.07'],
-  ['halt', 16, 36, 'home', '🪙        🏠💤      💲1.31    💲1.12    💲1.07'],
-  ['halt', 16, 37, 'home', '🪙       🏠💤       💲1.31    💲1.12    💲1.07'],
-  ['halt', 16, 38, 'home', '🪙      🏠💤        💲1.31    💲1.12    💲1.07'],
 ]
 
 // What meter.fare() makes of a cost.
@@ -2348,22 +2194,24 @@ test('drops the stamp of the lap before when the animal reaches its coin again',
   expect(sorted(old)).toEqual([[40, 0.5], [30, 0.5]])
 })
 
-test('blinks every zzz and leaves its place empty meanwhile', async () => {
+test('blinks the wrench and every zzz and leaves their place empty meanwhile', async () => {
   // A second there, a second gone.
-  expect([0, 999, 1000, 1999, 2000].map(zzzShows)).toEqual([true, true, false, false, true])
+  expect([0, 999, 1000, 1999, 2000].map(blinkShows)).toEqual([true, true, false, false, true])
   for (let dist = 0; dist < 100; dist += 1) {
-    for (const [phase, mark] of [['vacant', ''], ['vacant', 'home'], ['halt', 'home'], ['halt', 'doze']] as const) {
+    for (const [phase, mark, glyph] of [['vacant', '', '💤'], ['vacant', 'home', '💤'], ['halt', '', '🔧']] as const) {
       const there = render(phase, 7, dist, mark, 48, false, STAMPS)
-      // Nothing else moves, and what the zzz hides does not come back.
-      expect(render(phase, 7, dist, mark, 48, false, STAMPS, false)).toBe(there.replace('💤', '  ').trimEnd())
+      expect(there).toContain(glyph)
+      // Nothing else moves, and what it hides does not come back.
+      expect(render(phase, 7, dist, mark, 48, false, STAMPS, false)).toBe(there.replace(glyph, '  ').trimEnd())
     }
-    for (const [phase, mark] of [['run', ''], ['run', 'gust'], ['run', 'fire'], ['halt', '']] as const) {
+    // The wind and the fire of a running animal stay.
+    for (const [phase, mark] of [['run', ''], ['run', 'gust'], ['run', 'fire']] as const) {
       const there = render(phase, 7, dist, mark, 48, false, STAMPS)
       expect(render(phase, 7, dist, mark, 48, false, STAMPS, false)).toBe(there)
     }
   }
-  // As meter.py draws it, with zzz=False.
+  // As meter.py draws it, with blink=False.
   expect(render('vacant', 7, 11, '', 48, false, new Map(), false)).toBe('🪙        🪙        🪙        🪙   🐌')
-  expect(render('halt', 7, 11, 'doze', 48, false, new Map(), false)).toBe('🪙        🪙        🪙        🪙   🐘')
+  expect(render('halt', 7, 11, '', 48, false, new Map(), false)).toBe('🪙        🪙        🪙        🪙   🐘')
   expect(render('vacant', 7, 11, 'home', 48, false, new Map(), false)).toBe('🪙        🪙        🪙        🪙   🏠')
 })

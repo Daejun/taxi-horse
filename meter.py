@@ -5,7 +5,7 @@ This is the counting half. There are two ways to run it.
 With the mod (the plugin this file ships in): the mod runs
 "taxi-horse --state" once a second, with the session id and the transcript
 path as JSON on stdin, gets back "<state> <level>", with a third word when
-the animal has a mark ("gust", "fire", "doze" or "home"), and draws the
+the animal has a mark ("gust", "fire" or "home"), and draws the
 line itself, on a row of its own under the input box. It redraws as often as the animal
 moves a column, so the animal never jumps.
 
@@ -28,25 +28,28 @@ is the fare behind a dollar sign (see below). There is no ground line.
                right. What it left on the lap before turns back into coins
                one at a time, each when the animal is a coin and a half away
                from it: never at the moment the animal eats a coin.
-    standing   only tools are running
-    asleep     between turns. Whatever it was, it sleeps as a snail.
-The animal stops, sleeps and starts again where it stands. Every zzz blinks:
-ZZZ seconds there, ZZZ seconds gone.
+    standing   only tools are running. A wrench is right behind the animal:
+               it is not asleep, a tool is at work. A tool call that waits
+               for the user to allow it counts too: the meter only sees
+               that its result is not there yet.
+    asleep     between turns. Whatever it was, it sleeps as a snail, with a
+               zzz right behind it.
+The animal stops, sleeps and starts again where it stands. The wrench and
+every zzz blink: BLINK seconds there, BLINK seconds gone.
 
-The animal is the average speed. What goes behind it is the speed of the
-moment, the last GUST_WINDOW seconds, against that average:
-    wind       running, and the moment is GUST_FACTOR times the average or
-               more: it has just sped up
+The animal is the average speed. While it runs, what goes behind it is the
+speed of the moment, the last GUST_WINDOW seconds, against that average:
+    wind       the moment is GUST_FACTOR times the average or more: it has
+               just sped up
     fire       the same, and the moment is FIRE_FACTOR times the speed the
                fastest animal starts at, or more
-    zzz        standing, and no token for DOZE_AFTER seconds: it has just
-               stopped. It dozes as the animal it is.
 While a request is out there is no zzz, however long it takes: the tokens of
 a response only show when it is complete (see below).
 
-When the average is 0 too, no token for WINDOW seconds, and no request is
-out, the animal goes into its house to sleep: a house stands in its place,
-with its zzz. A session that has not started yet is at home as well.
+When the average is 0 too, no token for WINDOW seconds, and no turn is on,
+the animal goes into its house to sleep: a house stands in its place, with
+its zzz. A session that has not started yet is at home as well. While tools
+run the animal stays out with its wrench, however long they take.
 
 The fare behind a dollar sign is what the session has cost, in US dollars,
 since the fare before it: the price of that stretch, not the total. The cost
@@ -89,7 +92,7 @@ Install: see README.md.
 Run by hand:
     taxi-horse --demo          draw every state
     taxi-horse --state         what the mod runs: prints "<state> <level>", and
-                               "gust", "fire", "doze" or "home" after them
+                               "gust", "fire" or "home" after them
     taxi-horse --levels        the speed at which each animal starts, for this user
     taxi-horse --learn         rebuild the history from recent transcripts
     taxi-horse < statusline.json
@@ -119,8 +122,7 @@ LEVEL_MAX = 16           # speed levels run from 0 to this
 GUST_WINDOW = 10.0       # seconds the speed of the moment is taken over
 GUST_FACTOR = 3.0        # a gust: the moment is this many times the average
 FIRE_FACTOR = 3.0        # fire: a gust at this many times the speed the fastest animal starts at
-DOZE_AFTER = 10.0        # seconds without a token before a standing animal dozes
-ZZZ = 1.0                # seconds a zzz is there, and seconds it is gone, as it blinks
+BLINK = 1.0              # seconds the wrench or a zzz is there, and seconds it is gone, as it blinks
 # The level of a rate is the share of this user's earlier rates that were
 # lower, cut into LEVEL_MAX + 1 equal parts. Until there is a history a guess
 # stands in for it: rates spread evenly, on a log scale, from RATE_MIN to RATE_MAX.
@@ -429,27 +431,25 @@ def level_starts(hist=None):
     return starts
 
 
-GUST, FIRE, DOZE, HOME = "gust", "fire", "doze", "home"
+GUST, FIRE, HOME = "gust", "fire", "home"
 
 
 def mark(st, now, ph, tok_s, hist=None):
-    """What goes behind the animal: the speed of the moment against the average.
+    """What the state alone does not say: the speed of the moment while the
+    animal runs, and whether it sleeps at home.
 
     GUST while running, when the last GUST_WINDOW seconds ran at GUST_FACTOR
     times the average or more, and fast enough to be more than a snail. FIRE
     when that is also FIRE_FACTOR times the speed the fastest animal starts at.
-    DOZE while standing, when no token was registered for DOZE_AFTER seconds.
-    HOME when no request is out and the average is 0 too. Otherwise "".
+    HOME between turns, when the average is 0 too. Otherwise "": a standing
+    animal has no mark, its wrench is drawn for the state.
     """
     if ph == RUN:
         fast = rate(st, now, GUST_WINDOW)
         if fast > 0 and fast >= GUST_FACTOR * tok_s and level(fast, hist) >= 1:
             return FIRE if fast >= FIRE_FACTOR * level_starts(hist)[-1] else GUST
-    elif tok_s <= 0:
+    elif ph == VACANT and tok_s <= 0:
         return HOME
-    elif ph == HALT:
-        if not any(now - DOZE_AFTER < e[0] <= now for e in st["ev"]):
-            return DOZE
     return ""
 
 
@@ -598,7 +598,8 @@ FARE_MAX = 5                         # characters of a fare at most: it ends wel
 # rabbit, kangaroo, deer, horse, tiger, leopard, eagle. With the rates of 150
 # recent sessions the median is the elephant and the 94th percentile the deer.
 ANIMALS = tuple(enumerate("🐌🐢🦔🐁🐓🐖🐑🐘🐪🐕🐇🦘🦌🐎🐅🐆🦅"))
-BEHIND = {GUST: "💨", FIRE: "🔥", DOZE: "💤", HOME: "💤"}      # what a mark draws behind the animal
+BEHIND = {GUST: "💨", FIRE: "🔥"}     # what a mark draws behind a running animal
+TOOL = "🔧"                          # what stands behind an animal that stands while its tools run
 HOUSE = "🏠"                         # what stands in place of an animal that is at home
 
 
@@ -667,15 +668,16 @@ def animal_column(dist, width=TRACK):
     return 0 if pos == lap - 1 else width - 2 - pos
 
 
-def zzz_shows(now):
-    """Is the zzz of a sleeping animal there at this time, or gone, as it blinks."""
-    return int(now // ZZZ) % 2 == 0
+def blink_shows(now):
+    """Is what blinks behind the animal, its wrench or its zzz, there at this
+    time, or gone."""
+    return int(now // BLINK) % 2 == 0
 
 
-def render(ph, lvl, dist, catching_up=False, width=None, mark="", stamps=None, zzz=True):
+def render(ph, lvl, dist, catching_up=False, width=None, mark="", stamps=None, blink=True):
     """The line: coins ahead of the animal, fares behind it, and right behind
-    it its zzz when asleep, or the wind, fire or zzz of its mark. At home, its
-    house stands in its place.
+    it its zzz when asleep, its wrench when it stands, or the wind or fire of
+    its mark when it runs. At home, its house stands in its place.
 
     stamps: {coin column: amount}. An eaten coin at such a column leaves a
     dollar sign and the fare of that amount (see fare_at()), or paw prints
@@ -687,17 +689,17 @@ def render(ph, lvl, dist, catching_up=False, width=None, mark="", stamps=None, z
     lap before turns back into coins one coin at a time. That is halfway
     between two coins: nothing else on the line changes at that moment.
 
-    zzz: False while a zzz is gone, as it blinks. Its place stays empty: what
-    it hides does not come back meanwhile."""
+    blink: False while the wrench or the zzz is gone, as it blinks. Its place
+    stays empty: what it hides does not come back meanwhile."""
     if width is None:
         width = track_width()
     x = animal_column(dist, width)
     # Two-column glyphs by their left column. The animal and what is right
     # behind it come first: a coin or a fare they would overlap is left out.
     glyphs = {x: HOUSE if mark == HOME else animal(0 if ph == VACANT else lvl)}
-    behind = "💤" if ph == VACANT else BEHIND.get(mark)
+    behind = "💤" if ph == VACANT else TOOL if ph == HALT else BEHIND.get(mark)
     if behind:
-        glyphs[x + 2] = behind if zzz or behind != "💤" else "  "
+        glyphs[x + 2] = behind if blink or ph == RUN else "  "
     fares = {}                           # one-column characters by their first column
     for c in coin_columns(width):
         if any(abs(c - taken) < 2 for taken in list(glyphs)):
@@ -816,7 +818,6 @@ def demo():
     show(VACANT, 0, 11.0, "<- at home: asleep, and the average is 0 too", HOME)
     show(VACANT, 0, 11.0, "<- asleep: between turns")
     show(HALT, 7, 11.0, "<- standing: tools running")
-    show(HALT, 7, 11.0, "<- dozing: standing, and no token for a while", DOZE)
     for lvl in range(LEVEL_MAX + 1):
         show(RUN, lvl, 15.0, "<- running, level %d" % lvl)
     show(RUN, 7, 15.0, "<- wind: it has just sped up", GUST)
@@ -856,7 +857,7 @@ def main():
     if "--state" in sys.argv:
         print(("%s %d %s" % (ph, lvl, mk)).rstrip())
     elif not mod_draws(directory, session, now):
-        print(render(ph, lvl, dist, catching_up, mark=mk, stamps=stamps, zzz=zzz_shows(now)))
+        print(render(ph, lvl, dist, catching_up, mark=mk, stamps=stamps, blink=blink_shows(now)))
 
 
 def cli():

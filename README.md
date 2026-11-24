@@ -11,12 +11,14 @@ running under the input box.
   🪙        🪙   🐘   💲0.19    🐾        💲0.05
 ```
 
-- The animal runs right to left while a request is out, stands while tools
-  run and sleeps between turns, always as a snail (`🐌💤`). Every zzz
-  blinks: a second there, a second gone.
+- The animal runs right to left while a request is out. While only tools
+  run it stands with a wrench behind it (`🐘🔧`): it is not asleep, a tool
+  is at work. Between turns it sleeps, always as a snail (`🐌💤`). The
+  wrench and every zzz blink: a second there, a second gone.
 - When the average speed is 0 too, two minutes after the last token, and
-  no request is out, it goes into its house to sleep (`🏠💤`). A session
-  that has not started yet is at home as well.
+  no turn is on, it goes into its house to sleep (`🏠💤`). A session that
+  has not started yet is at home as well. While tools run it stays out
+  with its wrench, however long they take.
 - It eats the coins on its way. After the last coin it starts again from
   the right. What it left on the lap before turns back into coins one at a
   time, each when the animal is a coin and a half away from it: never at
@@ -31,10 +33,10 @@ running under the input box.
 - The kind of animal is the speed, averaged over two minutes: 17 of them,
   from a snail to an eagle. Which speed gets which animal follows the
   user's own history, so everyone sees the whole range.
-- Right behind the animal is the speed of the last 10 seconds against that
-  average. Wind (`🐎💨`): it has just sped up, to 3 times the average or
-  more. Fire (`🐎🔥`): the same, and to 3 times the speed the fastest animal
-  starts at. Zzz (`🐎💤`): it stands, and no token has come for 10 seconds.
+- Right behind a running animal is the speed of the last 10 seconds against
+  that average. Wind (`🐎💨`): it has just sped up, to 3 times the average
+  or more. Fire (`🐎🔥`): the same, and to 3 times the speed the fastest
+  animal starts at.
 - When the animal changes into another, or wakes up, a poof (`💥`) stands
   in its place for a moment. Falling asleep and going home have none.
 - The faster it runs, the more often it is redrawn, one column at a time.
@@ -108,7 +110,7 @@ with the `python3` that is first on `PATH`:
 
 ```sh
 TAXI=$(ls -dt ~/.claude/plugins/cache/taxi-horse/taxi-horse/*/taxi-horse | head -n 1)
-"$TAXI" --demo                    # prints 27 lines of coins and animals, exit 0
+"$TAXI" --demo                    # prints 26 lines of coins and animals, exit 0
 ```
 
 If a coin or an animal shows as an empty box, the terminal has no colour
@@ -235,7 +237,7 @@ It makes no network requests.
 
 | Command | What it does |
 | --- | --- |
-| `taxi-horse --state` | what the mod runs: prints `<state> <level>` for the session on stdin, and `gust`, `fire`, `doze` or `home` after them when the animal has that mark |
+| `taxi-horse --state` | what the mod runs: prints `<state> <level>` for the session on stdin, and `gust`, `fire` or `home` after them when the animal has that mark |
 | `taxi-horse` | as the `statusLine` command: prints the line |
 | `taxi-horse --demo` | draws every state and every animal |
 | `taxi-horse --levels` | the speed at which each animal starts, for this user |

@@ -411,11 +411,11 @@ class MeterTest(unittest.TestCase):
     def plain(self, ph, lvl, dist, **kw):
         return meter.render(ph, lvl, dist, width=meter.TRACK, **kw)
 
-    def test_state_mode_names_what_goes_behind_the_animal(self):
+    def test_state_mode_has_no_third_word_while_tools_run(self):
         now = datetime.now(timezone.utc).timestamp()
         self.write(prompt(now - 30), assistant(now - 20, "m1", [0, 0, 0, 50], ["tool_use"]))
         out = self.run_cli("--state")
-        self.assertEqual((out.returncode, out.stdout), (0, "halt 0 doze\n"))
+        self.assertEqual((out.returncode, out.stdout), (0, "halt 0\n"))
 
     def test_state_mode_says_home_for_a_session_with_nothing_yet(self):
         self.data = {"session_id": "fresh"}
@@ -433,15 +433,17 @@ class MeterTest(unittest.TestCase):
         for ph in (RUN, HALT):
             self.assertIn(meter.animal(12), self.plain(ph, 12, 9.0))
 
-    def test_line_is_only_coins_an_animal_and_its_zzz(self):
+    def test_line_is_only_coins_an_animal_and_its_zzz_or_wrench(self):
         animals = {g for _, g in meter.ANIMALS}
         for ph in (RUN, HALT, VACANT):
             for lvl in (0, 5, 16):
                 for d in range(0, 90):
                     line = self.plain(ph, lvl, float(d))
-                    self.assertEqual(set(line) - animals - set(" 💤" + meter.COIN + meter.EATEN), set(), line)
+                    behind = {VACANT: "💤", HALT: meter.TOOL, RUN: ""}[ph]
+                    self.assertEqual(set(line) - animals - set(" " + behind + meter.COIN + meter.EATEN), set(), line)
                     self.assertEqual(sum(line.count(g) for g in animals), 1, line)
-        self.assertEqual(self.plain(RUN, 7, 9.0), self.plain(HALT, 7, 9.0), "nothing but the motion tells them apart")
+        self.assertEqual(self.plain(RUN, 7, 9.0), self.plain(HALT, 7, 9.0).replace(meter.TOOL, ""),
+                         "nothing but the wrench and the motion tells them apart")
         self.assertNotIn("\033", self.plain(RUN, 16, 9.0))
 
     def test_line_fits_the_track_and_has_no_trailing_blanks(self):
@@ -449,9 +451,9 @@ class MeterTest(unittest.TestCase):
             for lvl in (0, 7, 16):
                 for d in range(0, 90):
                     line = self.plain(ph, lvl, float(d))
-                    # The zzz of an animal asleep at the right end sticks out past the track.
+                    # The zzz or the wrench of an animal at the right end sticks out past the track.
                     x = meter.animal_column(float(d), meter.TRACK)
-                    extra = max(0, x + 4 - meter.TRACK) if ph == VACANT else 0
+                    extra = max(0, x + 4 - meter.TRACK) if ph != RUN else 0
                     self.assertLessEqual(columns(line), meter.TRACK + extra, (ph, lvl, d, line))
                     self.assertEqual(line, line.rstrip(" "))
 
@@ -520,7 +522,7 @@ class MeterTest(unittest.TestCase):
         again = self.paid(RUN, 7, float(lap))
         self.assertEqual((again.count(meter.COIN), again.count(meter.EATEN)), (5, 0), "new coins on the next lap")
 
-    def test_fare_gives_way_to_the_animal_and_its_zzz(self):
+    def test_fare_gives_way_to_the_animal_and_its_zzz_or_wrench(self):
         w = self.W
         for d in range(meter.lap_length(w)):
             for ph in (RUN, HALT, VACANT):
@@ -528,21 +530,24 @@ class MeterTest(unittest.TestCase):
                 self.assertEqual(sum(line.count(g) for _, g in meter.ANIMALS), 1, line)
                 if ph == VACANT:
                     self.assertIn("🐌💤", line, "the zzz stays next to the animal: %r" % line)
+                if ph == HALT:
+                    self.assertIn(meter.animal(3) + meter.TOOL, line, "and so does the wrench: %r" % line)
 
-    def test_zzz_blinks_and_its_place_stays_empty_meanwhile(self):
-        self.assertEqual([meter.zzz_shows(t) for t in (0, 0.999, 1.0, 1.999, 2.0, T0, T0 + 1.5)],
+    def test_wrench_and_zzz_blink_and_their_place_stays_empty_meanwhile(self):
+        self.assertEqual([meter.blink_shows(t) for t in (0, 0.999, 1.0, 1.999, 2.0, T0, T0 + 1.5)],
                          [True, True, False, False, True, True, False], "a second there, a second gone")
         for d in range(0, 2 * meter.lap_length(self.W)):
-            for ph, mark in ((VACANT, ""), (VACANT, meter.HOME), (HALT, meter.HOME), (HALT, meter.DOZE)):
+            for ph, mark, glyph in ((VACANT, "", "💤"), (VACANT, meter.HOME, "💤"), (HALT, "", meter.TOOL)):
                 there = self.paid(ph, 7, float(d), mark=mark)
-                gone = self.paid(ph, 7, float(d), mark=mark, zzz=False)
-                self.assertEqual(there.count("💤"), 1, there)
-                self.assertEqual(gone, there.replace("💤", "  ").rstrip(" "),
-                                 "nothing else moves, and what the zzz hides does not come back")
-            for ph, mark in ((RUN, ""), (RUN, meter.GUST), (RUN, meter.FIRE), (HALT, "")):
-                self.assertEqual(self.paid(ph, 7, float(d), mark=mark, zzz=False), self.paid(ph, 7, float(d), mark=mark),
-                                 "only a zzz blinks")
-        self.assertEqual(self.plain(VACANT, 7, 11.0, zzz=False), "🪙        🪙        🪙        🪙   🐌")
+                gone = self.paid(ph, 7, float(d), mark=mark, blink=False)
+                self.assertEqual(there.count(glyph), 1, there)
+                self.assertEqual(gone, there.replace(glyph, "  ").rstrip(" "),
+                                 "nothing else moves, and what it hides does not come back")
+            for ph, mark in ((RUN, ""), (RUN, meter.GUST), (RUN, meter.FIRE)):
+                self.assertEqual(self.paid(ph, 7, float(d), mark=mark, blink=False), self.paid(ph, 7, float(d), mark=mark),
+                                 "the wind and the fire of a running animal stay")
+        self.assertEqual(self.plain(VACANT, 7, 11.0, blink=False), "🪙        🪙        🪙        🪙   🐌")
+        self.assertEqual(self.plain(HALT, 7, 11.0, blink=False), "🪙        🪙        🪙        🪙   🐘")
 
     def test_lap_before_turns_back_into_coins_one_coin_at_a_time(self):
         A, B, C, D = self.A, self.B, self.C, self.D
@@ -569,7 +574,7 @@ class MeterTest(unittest.TestCase):
                          "the last to come back is the coin at the left end")
         # Whatever the lap before left, and whatever the animal does meanwhile.
         was = {A: meter.EATEN, B: meter.PRINTS, C: meter.EATEN, D: meter.EATEN, 0: meter.EATEN}
-        for ph, mark in ((RUN, ""), (RUN, meter.FIRE), (HALT, meter.DOZE), (VACANT, ""), (VACANT, meter.HOME)):
+        for ph, mark in ((RUN, ""), (RUN, meter.FIRE), (HALT, ""), (VACANT, ""), (VACANT, meter.HOME)):
             back = []
             for d in range(lap):
                 x = meter.animal_column(float(d), self.W)
@@ -656,12 +661,11 @@ class MeterTest(unittest.TestCase):
             st = {"ev": [(T0 - 1, tokens)]}
             self.assertEqual(meter.mark(st, T0, RUN, tokens / W, hist), want, tokens)
 
-    def test_standing_animal_dozes_after_ten_seconds_without_a_token(self):
+    def test_standing_animal_has_no_mark_and_no_zzz(self):
         self.run_meter(T0)
         self.write(prompt(T0 + 1), assistant(T0 + 2, "m1", [0, 0, 0, 3000], ["tool_use"]))
         self.assertEqual(self.run_mark(T0 + 3), (HALT, ""), "it has only just stopped")
-        self.assertEqual(self.run_mark(T0 + 12), (HALT, ""))
-        self.assertEqual(self.run_mark(T0 + 13), (HALT, meter.DOZE))
+        self.assertEqual(self.run_mark(T0 + 13), (HALT, ""), "ten seconds without a token: a tool is at work")
         self.write(tool_result(T0 + 14))
         self.assertEqual(self.run_mark(T0 + 15), (RUN, ""), "a request is out")
         self.assertEqual(self.run_mark(T0 + 100), (RUN, ""), "no zzz while a request is out, however long it takes")
@@ -674,8 +678,10 @@ class MeterTest(unittest.TestCase):
         self.assertEqual(self.run_mark(T0 + 2), (RUN, ""), "a request is out: it is up, even at speed 0")
         self.write(assistant(T0 + 3, "m1", [0, 0, 0, 3000], ["tool_use"]))
         self.assertEqual(self.run_mark(T0 + 4), (HALT, ""))
-        self.assertEqual(self.run_mark(T0 + 4 + W - 1), (HALT, meter.DOZE), "the average still has the tokens")
-        self.assertEqual(self.run_mark(T0 + 4 + W), (HALT, meter.HOME), "a tool that runs on and on")
+        self.assertEqual(self.run_mark(T0 + 4 + W - 1), (HALT, ""), "the average still has the tokens")
+        halted = meter.measure(self.data, T0 + 4 + W, directory=self.state, rates=self.rates)
+        self.assertEqual((halted[0], halted[5], halted[6]), (HALT, 0, ""),
+                         "a tool that runs on and on: the average is 0, and it stays out with its wrench")
         self.write(tool_result(T0 + 4 + W + 1), assistant(T0 + 4 + W + 2, "m2", [0, 0, 0, 3000], ["text"]))
         end = T0 + 4 + W + 3
         self.assertEqual(self.run_mark(end), (VACANT, ""), "the turn is over: asleep outside, as a snail")
@@ -684,21 +690,19 @@ class MeterTest(unittest.TestCase):
 
     def test_house_stands_in_place_of_the_animal_with_its_zzz(self):
         animals = {g for _, g in meter.ANIMALS}
-        for ph in (VACANT, HALT):
-            for lvl in (0, 7):
-                for d in range(0, 90):
-                    line = self.plain(ph, lvl, float(d), mark=meter.HOME)
-                    self.assertEqual(line.count(meter.HOUSE + "💤"), 1, line)
-                    self.assertEqual(set(line) & animals, set(), line)
-                    self.assertEqual(line.index(meter.HOUSE), self.plain(ph, lvl, float(d)).index(meter.animal(0 if ph == VACANT else lvl)),
-                                     "where the animal stood")
-                    self.assertLessEqual(columns(line), meter.TRACK + 2, line)
+        for lvl in (0, 7):
+            for d in range(0, 90):
+                line = self.plain(VACANT, lvl, float(d), mark=meter.HOME)
+                self.assertEqual(line.count(meter.HOUSE + "💤"), 1, line)
+                self.assertEqual(set(line) & animals, set(), line)
+                self.assertEqual(line.index(meter.HOUSE), self.plain(VACANT, lvl, float(d)).index(meter.animal(0)),
+                                 "where the animal stood")
+                self.assertLessEqual(columns(line), meter.TRACK + 2, line)
 
     def test_mark_is_drawn_right_behind_the_animal(self):
         a = meter.animal(7)
         self.assertIn(a + "💨", self.plain(RUN, 7, 9.0, mark=meter.GUST))
         self.assertIn(a + "🔥", self.plain(RUN, 7, 9.0, mark=meter.FIRE))
-        self.assertIn(a + "💤", self.plain(HALT, 7, 9.0, mark=meter.DOZE), "it dozes as the animal it is")
         asleep = self.plain(VACANT, 7, 9.0, mark=meter.GUST)
         self.assertEqual(asleep, self.plain(VACANT, 7, 9.0), "between turns a mark changes nothing")
         for d in range(0, 90):
@@ -706,6 +710,19 @@ class MeterTest(unittest.TestCase):
             self.assertEqual((line.count(a + "🔥"), line.count("🔥")), (1, 1), line)
             self.assertLessEqual(columns(line), meter.TRACK + 2, line)
             self.assertEqual(line.index(a), self.plain(RUN, 7, float(d)).index(a), "the animal stays where it is")
+
+    def test_wrench_stands_right_behind_an_animal_whose_tools_run(self):
+        self.assertEqual((len(meter.TOOL), columns(meter.TOOL)), (1, 2), "one code point, two columns")
+        for lvl in (0, 7, 16):
+            a = meter.animal(lvl)
+            for d in range(0, 90):
+                line = self.plain(HALT, lvl, float(d))
+                self.assertEqual((line.count(a + meter.TOOL), line.count(meter.TOOL)), (1, 1), line)
+                self.assertNotIn("💤", line, "it is not asleep, even as a snail")
+                self.assertLessEqual(columns(line), meter.TRACK + 2, line)
+                self.assertEqual(line.index(a), self.plain(RUN, lvl, float(d)).index(a), "the animal stays where it is")
+        self.assertNotIn(meter.TOOL, self.plain(RUN, 7, 9.0))
+        self.assertNotIn(meter.TOOL, self.plain(VACANT, 7, 9.0), "asleep, it has its zzz")
 
     # ---- the fare
 
@@ -887,32 +904,31 @@ class MeterTest(unittest.TestCase):
         w = self.W
         stamps = {0: 1.5, D: 1.4, C: 1.31, B: 1.12, A: 1.07}
         animals = {g for _, g in meter.ANIMALS}
-        for ph in (RUN, HALT, VACANT):
-            for mark in ("", meter.GUST, meter.HOME):
-                for d in range(0, 2 * meter.lap_length(w)):
-                    bare = self.plain(ph, 7, float(d), mark=mark)
-                    line = self.plain(ph, 7, float(d), mark=mark, stamps=stamps)
-                    x = meter.animal_column(float(d), w)
-                    self.assertLessEqual(columns(line), max(w, columns(bare)), line)
-                    self.assertEqual(line, line.rstrip(" "))
-                    standing = meter.HOUSE if mark == meter.HOME else meter.animal(0 if ph == VACANT else 7)
-                    self.assertEqual(columns(line[:line.index(standing)]), x, "nothing has pushed the animal aside")
-                    # What stands behind the animal: its zzz, the wind or nothing.
-                    behind = 2 if ph == VACANT or mark else 0
-                    for c in (A, B, C, D, 0):
-                        text = meter.EATEN + meter.fare(stamps[c])
-                        if c >= x + 2 + behind:
-                            self.assertEqual(self.glyph_at(line, c), meter.EATEN, (ph, mark, d, c))
-                            self.assertIn(text, line, "every eaten coin clear of the animal has its fare")
-                        elif c + 1 < x and x > c + meter.REFILL:
-                            self.assertIn(text, line, "the fare of the lap before still stands")
-                        elif c + 1 < x:
-                            self.assertEqual(self.glyph_at(line, c), meter.COIN, "a coin again")
-                            self.assertNotIn(text, line)
-                        else:
-                            self.assertNotIn(text, line, "no fare under the animal")
-                    self.assertEqual(set(line) - animals - set(" 💤💨" + meter.HOUSE + meter.COIN + meter.EATEN),
-                                     set("0123456789.") & set(line), line)
+        for ph, mark in ((RUN, ""), (RUN, meter.GUST), (HALT, ""), (VACANT, ""), (VACANT, meter.HOME)):
+            for d in range(0, 2 * meter.lap_length(w)):
+                bare = self.plain(ph, 7, float(d), mark=mark)
+                line = self.plain(ph, 7, float(d), mark=mark, stamps=stamps)
+                x = meter.animal_column(float(d), w)
+                self.assertLessEqual(columns(line), max(w, columns(bare)), line)
+                self.assertEqual(line, line.rstrip(" "))
+                standing = meter.HOUSE if mark == meter.HOME else meter.animal(0 if ph == VACANT else 7)
+                self.assertEqual(columns(line[:line.index(standing)]), x, "nothing has pushed the animal aside")
+                # What stands behind the animal: its zzz, its wrench, the wind or nothing.
+                behind = 2 if ph != RUN or mark else 0
+                for c in (A, B, C, D, 0):
+                    text = meter.EATEN + meter.fare(stamps[c])
+                    if c >= x + 2 + behind:
+                        self.assertEqual(self.glyph_at(line, c), meter.EATEN, (ph, mark, d, c))
+                        self.assertIn(text, line, "every eaten coin clear of the animal has its fare")
+                    elif c + 1 < x and x > c + meter.REFILL:
+                        self.assertIn(text, line, "the fare of the lap before still stands")
+                    elif c + 1 < x:
+                        self.assertEqual(self.glyph_at(line, c), meter.COIN, "a coin again")
+                        self.assertNotIn(text, line)
+                    else:
+                        self.assertNotIn(text, line, "no fare under the animal")
+                self.assertEqual(set(line) - animals - set(" 💤💨" + meter.TOOL + meter.HOUSE + meter.COIN + meter.EATEN),
+                                 set("0123456789.") & set(line), line)
         self.assertEqual(self.plain(RUN, 7, self.reach(16), stamps=stamps),
                          "💲1.50    🪙    🐘  💲1.31    💲1.12    💲1.07", "the coin ahead is a coin, the left end is of the lap before")
         self.assertEqual(self.plain(RUN, 7, self.reach(15), stamps=stamps),
