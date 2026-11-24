@@ -34,8 +34,9 @@ is the fare behind a dollar sign (see below). There is no ground line.
                that its result is not there yet.
     asleep     between turns. Whatever it was, it sleeps as a snail, with a
                zzz right behind it.
-The animal stops, sleeps and starts again where it stands. The wrench and
-every zzz blink: BLINK seconds there, BLINK seconds gone.
+The animal stops, sleeps and starts again where it stands, unless it has
+gone home (see below). The wrench and every zzz blink: BLINK seconds there,
+BLINK seconds gone.
 
 The animal is the average speed. While it runs, what goes behind it is the
 speed of the moment, the last GUST_WINDOW seconds, against that average:
@@ -47,9 +48,10 @@ While a request is out there is no zzz, however long it takes: the tokens of
 a response only show when it is complete (see below).
 
 When the average is 0 too, no token for WINDOW seconds, and no turn is on,
-the animal goes into its house to sleep: a house stands in its place, with
-its zzz. A session that has not started yet is at home as well. While tools
-run the animal stays out with its wrench, however long they take.
+the animal goes into its house to sleep, and the line starts over as in a new
+session: the house stands at the right end, with its zzz, and every coin is
+back. A session that has not started yet is at home as well. While tools run
+the animal stays out with its wrench, however long they take.
 
 The fare behind a dollar sign is what the session has cost, in US dollars,
 since the fare before it: the price of that stretch, not the total. The cost
@@ -57,7 +59,9 @@ is the one /cost totals: "cost.total_cost_usd" of the status line input here,
 $.session.usage() in the mod. It is Claude Code's own estimate at list price,
 not a bill, and on a subscription no charge at all. A coin is stamped when the
 animal reaches it and keeps its fare until its place turns back into a coin
-on the next lap. An amount of less than half a cent makes no fare: paw prints
+on the next lap, or until the animal goes home. The fares count on across a
+stay at home: the first one after it has what was spent since the fare
+before it. An amount of less than half a cent makes no fare: paw prints
 are left in the coin's place, and the amount goes into the next fare, so
 nothing spent is left out. The fares count from the meter's first reading of
 the cost. A fare takes FARE_MAX characters at most: "0.42", "12.34", "123.4",
@@ -552,7 +556,7 @@ def stamped(stamps, billed, before, x, usd, width=None):
     return stamps, billed
 
 
-def advance(path, running, now, lap, usd=None):
+def advance(path, running, now, lap, usd=None, home=False):
     """Move the animal. Returns how far it has run so far, in columns, and the
     stamps it has left.
 
@@ -564,9 +568,17 @@ def advance(path, running, now, lap, usd=None):
     starts the next lap at the right end.
 
     usd: the session's cost so far, when known (see stamped()).
+
+    home: the animal is at home. The line starts over, as in a new session:
+    the distance is 0 and there are no stamps. billed stays, so what was spent
+    since the last fare goes into the next one.
     """
     dist, t, was_running, stamps, billed = load_run(path)
-    if running:
+    if home:
+        if dist or stamps or was_running:
+            dist, stamps = 0.0, {}
+            save_run(path, dist, now, False, stamps, billed)
+    elif running:
         # The first redraw after a stop moves nothing, and a gap in the redraws
         # is not a leap.
         dt = min(max(now - t, 0.0), 2.0) if was_running else 0.0
@@ -784,7 +796,7 @@ def measure(data, now, directory=None, budget=SCAN_BUDGET, rates=None):
             drop_old_states(directory, now)
         save_state(path, st)
     dist, stamps = advance(os.path.join(directory, session + ".run"), ph == RUN, now,
-                           lap_length(track_width()), cost_of(data))
+                           lap_length(track_width()), cost_of(data), mk == HOME)
     debug = os.environ.get("TAXI_HORSE_DEBUG")
     if debug:
         tails = " ".join("%s:%s/%d/%.0fs" % (k or "main", fs["tail"] or "-", fs["pend"],
@@ -815,7 +827,7 @@ def demo():
         print(line + " " * pad, note)
 
     left = {40: 0.05, 30: 0.002, 20: 0.19, 10: 1.2, 0: 0.03}     # what a lap may leave, by coin column
-    show(VACANT, 0, 11.0, "<- at home: asleep, and the average is 0 too", HOME)
+    show(VACANT, 0, 0.0, "<- at home: asleep, and the average is 0 too. The line has started over", HOME)
     show(VACANT, 0, 11.0, "<- asleep: between turns")
     show(HALT, 7, 11.0, "<- standing: tools running")
     for lvl in range(LEVEL_MAX + 1):

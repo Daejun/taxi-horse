@@ -845,6 +845,46 @@ class MeterTest(unittest.TestCase):
             dist, stamps = meter.advance(path, True, T0 + i, lap, 9.0)
         self.assertEqual((meter.animal_column(dist, self.W), stamps), (B, {A: 0.5, B: 6.5}))
 
+    def test_going_home_starts_the_line_over_and_the_fares_count_on(self):
+        A, B = self.A, self.B
+        lap = meter.lap_length(self.W)
+        path = os.path.join(self.dir, "home.run")
+        for i, _x, stamps, billed in self.walk("home", lambda i: 2.0 + i / 100, 20):
+            pass
+        self.assertEqual((self.fares(stamps), billed), ({A: "0.06", B: "0.10"}, 2.16))
+        self.assertEqual(meter.advance(path, False, T0 + 200, lap, 2.5, home=True), (0.0, {}))
+        dist, _t, running, stamps, billed = meter.load_run(path)
+        self.assertEqual((dist, running, stamps, billed), (0.0, False, {}, 2.16),
+                         "what was spent since the last fare is not lost")
+        self.assertEqual(self.plain(VACANT, 0, dist, mark=meter.HOME, stamps=stamps),
+                         self.plain(VACANT, 0, 0.0, mark=meter.HOME), "the picture a new session starts with")
+        self.assertEqual(meter.advance(path, True, T0 + 300, lap, 3.0), (0.0, {}),
+                         "the first redraw of a run moves nothing")
+        for i in range(301, 307):
+            dist, stamps = meter.advance(path, True, T0 + i, lap, 3.0)
+        self.assertEqual((meter.animal_column(dist, self.W), self.fares(stamps)), (A, {A: "0.84"}),
+                         "the first fare after home has everything since the fare before it")
+        fresh = os.path.join(self.dir, "fresh.run")
+        self.assertEqual(meter.advance(fresh, False, T0, lap, 1.0, home=True), (0.0, {}))
+        self.assertFalse(os.path.exists(fresh), "a line that is already new is not written again")
+
+    def test_session_that_goes_home_draws_the_first_picture_again(self):
+        self.data["cost"] = {"total_cost_usd": 1.0}
+        self.write(prompt(T0 + 1))
+        for t in range(2, 23):
+            ran = meter.measure(self.data, T0 + t, directory=self.state, rates=self.rates)
+            self.data["cost"]["total_cost_usd"] += 0.01
+        self.assertEqual((ran[0], ran[4]), (RUN, 20.0))
+        self.assertEqual(len(ran[7]), 2, "two coins eaten")
+        self.write(assistant(T0 + 23, "m1", [0, 0, 0, 3000], ["text"]))
+        asleep = meter.measure(self.data, T0 + 24, directory=self.state, rates=self.rates)
+        self.assertEqual((asleep[0], asleep[6], asleep[4], asleep[7]), (VACANT, "", 20.0, ran[7]),
+                         "asleep outside, where it stands")
+        home = meter.measure(self.data, T0 + 24 + W, directory=self.state, rates=self.rates)
+        self.assertEqual((home[0], home[6], home[4], home[7]), (VACANT, meter.HOME, 0.0, {}))
+        self.assertEqual(self.plain(VACANT, 0, home[4], mark=meter.HOME, stamps=home[7]),
+                         "🪙        🪙        🪙        🪙        🪙    🏠💤")
+
     def test_cost_that_starts_over_is_counted_from_there(self):
         A, B, C = self.A, self.B, self.C
         stamps, billed = meter.stamped({A: 0.5}, 2.5, B + 1, B, 0.2)

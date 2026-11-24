@@ -9,6 +9,7 @@ import {
   fare,
   fareAt,
   findPython,
+  homeFares,
   lastLine,
   parseLive,
   parseProbe,
@@ -2168,6 +2169,21 @@ test('stamps a coin once, and only when the animal reaches it', async () => {
   expect(fareAt(0.004, 40)).toBe('')
   expect(fareAt(100000, 40)).toBe('')
   expect(fareAt(99999, 40)).toBe('99999')
+})
+
+test('starts the line over at home, and the fares count on', async () => {
+  const ran = walk(dist => 2 + dist / 100, 20)
+  expect([...ran.fares.stamps].map(([c, usd]) => [c, fare(usd)])).toEqual([[40, '0.05'], [30, '0.10']])
+  expect(ran.fares.billed).toBe(2.16)
+  const home = homeFares(ran.fares)
+  // The picture a new session starts with, as meter.py draws it.
+  expect(render('vacant', 0, 0, 'home', 48, false, home.stamps)).toBe('🪙        🪙        🪙        🪙        🪙    🏠💤')
+  // What was spent since the last fare is not lost: it goes into the next one.
+  expect(home.billed).toBe(ran.fares.billed)
+  const next = stamped(home, animalColumn(5), animalColumn(6), 3)
+  expect(fareAt(next.stamps.get(40) ?? 0, 40)).toBe('0.84')
+  // The fares handed in are left alone.
+  expect(ran.fares.stamps.size).toBe(2)
 })
 
 test('drops the stamp of the lap before when the animal reaches its coin again', async () => {

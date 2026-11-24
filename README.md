@@ -16,9 +16,11 @@ running under the input box.
   is at work. Between turns it sleeps, always as a snail (`🐌💤`). The
   wrench and every zzz blink: a second there, a second gone.
 - When the average speed is 0 too, two minutes after the last token, and
-  no turn is on, it goes into its house to sleep (`🏠💤`). A session that
-  has not started yet is at home as well. While tools run it stays out
-  with its wrench, however long they take.
+  no turn is on, it goes into its house to sleep (`🏠💤`), and the line
+  starts over as in a new session: the house stands at the right end and
+  every coin is back. A session that has not started yet is at home as
+  well. While tools run it stays out with its wrench, however long they
+  take.
 - When a turn has ended and the session still waits for something, an
   hourglass stands in place of the zzz (`🐌⏳`, at home `🏠⏳`). That is
   background work that is still running, or a wakeup the session has
@@ -30,8 +32,9 @@ running under the input box.
 - Where a coin was, a `💲` with the fare is left: what the session has cost,
   in US dollars, since the fare before it. It is the price of that stretch,
   not the total, and it stays until its place turns back into a coin on the
-  next lap. A stretch that cost less than half a cent leaves paw prints
-  (`🐾`), and the amount goes into the next fare. The cost is the estimate `/cost`
+  next lap, or until the animal goes home. The first fare after home has
+  what was spent since the fare before it. A stretch that cost less than
+  half a cent leaves paw prints (`🐾`), and the amount goes into the next fare. The cost is the estimate `/cost`
   shows: list price, not a bill, and on a subscription no charge at all.
   Where Claude Code gives no cost, an eaten coin leaves nothing.
 - The kind of animal is the speed, averaged over two minutes: 17 of them,

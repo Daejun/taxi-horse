@@ -34,6 +34,9 @@ import type { Register } from 'claude-code'
 // The wrench of a standing animal, the hourglass and every zzz blink:
 // BLINK_MS there, BLINK_MS gone.
 //
+// Going home starts the line over, as in a new session: the house stands at
+// the right end and every coin is back. The fares count on.
+//
 // The fare behind a dollar sign is what the session has cost, in US dollars,
 // since the fare before it. A stretch of less than half a cent leaves paw
 // prints in the coin's place. The mod asks the session for its cost once a second:
@@ -245,6 +248,13 @@ export function stamped(
   }
 
   return { stamps, billed }
+}
+
+// The fares of an animal that has gone home. The line starts over, as in a new
+// session: the animal at the right end, distance 0, and every coin back.
+// billed stays, so what was spent since the last fare goes into the next one.
+export function homeFares(fares: Fares): Fares {
+  return { stamps: NO_STAMPS, billed: fares.billed }
 }
 
 // Is what blinks behind the animal, its wrench, its hourglass or its zzz,
@@ -535,6 +545,10 @@ export const register: Register = on => {
         phase = live.phase
         level = live.level
         mark = live.mark
+        if (mark === 'home') {
+          dist = 0
+          fares = homeFares(fares)
+        }
         usd = await costSoFar()
         isDrawing = true
       } catch {
