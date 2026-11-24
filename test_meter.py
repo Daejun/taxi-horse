@@ -402,7 +402,9 @@ class MeterTest(unittest.TestCase):
         self.assertEqual(state, VACANT)
         self.assertIn(int(level), range(17))
         drawn = self.run_cli()
-        self.assertIn("🐌💤", drawn.stdout, "without --state the same run draws the line")
+        asleep = meter.render(VACANT, 0, 0.0, width=meter.TRACK)
+        self.assertIn(drawn.stdout.rstrip("\n"), (asleep, asleep.replace("💤", "")),
+                      "without --state the same run draws the line, its zzz there or gone")
 
     # ---- drawing
 
@@ -470,50 +472,131 @@ class MeterTest(unittest.TestCase):
         self.assertEqual(meter.animal_column(float(lap), w), w - 2)
         self.assertNotIn(1, {meter.animal_column(float(d), w) for d in range(300)})
 
-    def test_coins_ahead_of_the_animal_and_dollar_signs_where_it_has_eaten(self):
-        w = meter.TRACK
+    W = meter.TRACK
+    COINS = list(meter.coin_columns(meter.TRACK))
+    # The coins in the order the animal eats them, but for the last, at the left end.
+    A, B, C, D = COINS[:0:-1]
+
+    def reach(self, column):
+        """How far the animal has run on a lap when it is at a column."""
+        return float(self.W - 2 - column)
+
+    def paid(self, ph, lvl, dist, **kw):
+        """The line when the stretch up to every coin eaten on this lap has cost five cents."""
+        x = meter.animal_column(dist, self.W)
+        return self.plain(ph, lvl, dist, stamps={c: 0.05 for c in self.COINS if c >= x}, **kw)
+
+    def test_coins_ahead_of_the_animal_and_fares_where_it_has_eaten(self):
+        w = self.W
         lap = meter.lap_length(w)
-        spots = list(range(0, w - 4, meter.COIN_GAP))
-        self.assertEqual(spots, [0, 8, 16, 24, 32])
+        spots = self.COINS
+        self.assertEqual((w, meter.COIN_GAP, spots), (48, 10, [0, 10, 20, 30, 40]))
         for ph in (RUN, HALT, VACANT):
-            start = self.plain(ph, 7, 0.0)
+            start = self.paid(ph, 7, 0.0)
             self.assertEqual((start.count(meter.COIN), start.count(meter.EATEN)), (5, 0),
                              "a full row of coins at the start of a lap")
             coins, eaten = [], []
             for d in range(lap):
-                line = self.plain(ph, 7, float(d))
+                line = self.paid(ph, 7, float(d))
                 x = meter.animal_column(float(d), w)
                 here = line.index(meter.animal(0 if ph == VACANT else 7))
                 coins.append(line.count(meter.COIN))
                 eaten.append(line.count(meter.EATEN))
                 self.assertEqual(coins[-1], sum(1 for c in spots if c + 1 < x), (ph, d, line))
+                self.assertEqual(eaten[-1], line.count(meter.EATEN + "0.05"), "a dollar sign only with its fare")
                 self.assertNotIn(meter.COIN, line[here:], "no coin behind the animal")
-                self.assertNotIn(meter.EATEN, line[:here], "no dollar sign ahead of it")
+                self.assertNotIn(meter.EATEN, line[:here], "no fare of this lap ahead of it")
                 self.assertEqual(columns(line[:here]), x, "nothing has pushed the animal aside")
                 self.assertLessEqual(coins[-1] + eaten[-1], 5)
+                # Without a fare an eaten coin leaves nothing.
+                bare = self.plain(ph, 7, float(d))
+                self.assertNotIn(meter.EATEN, bare)
+                self.assertEqual(bare, line.replace(meter.EATEN + "0.05", " " * 6).rstrip(" "))
             self.assertEqual(coins, sorted(coins, reverse=True), "only ever fewer coins within a lap")
             self.assertEqual(coins[-1], 0, "the last one is eaten at the left end")
-            self.assertEqual(max(eaten), 4, "every coin but the last is seen as a dollar sign")
-        self.assertEqual(self.plain(RUN, 7, 23.0).count(meter.EATEN), 2, "the third is under the animal")
-        self.assertEqual(self.plain(RUN, 7, 25.0).count(meter.EATEN), 3)
-        again = self.plain(RUN, 7, float(lap))
+            self.assertEqual(max(eaten), 4, "every coin but the last can leave a fare")
+        self.assertEqual(self.paid(RUN, 7, self.reach(self.C - 1)).count(meter.EATEN), 2, "the third is under the animal")
+        self.assertEqual(self.paid(RUN, 7, self.reach(self.C - 2)).count(meter.EATEN), 3)
+        again = self.paid(RUN, 7, float(lap))
         self.assertEqual((again.count(meter.COIN), again.count(meter.EATEN)), (5, 0), "new coins on the next lap")
 
-    def test_dollar_sign_gives_way_to_the_animal_and_its_zzz(self):
-        w = meter.TRACK
+    def test_fare_gives_way_to_the_animal_and_its_zzz(self):
+        w = self.W
         for d in range(meter.lap_length(w)):
             for ph in (RUN, HALT, VACANT):
-                line = self.plain(ph, 3, float(d))
+                line = self.paid(ph, 3, float(d))
                 self.assertEqual(sum(line.count(g) for _, g in meter.ANIMALS), 1, line)
                 if ph == VACANT:
                     self.assertIn("🐌💤", line, "the zzz stays next to the animal: %r" % line)
+
+    def test_zzz_blinks_and_its_place_stays_empty_meanwhile(self):
+        self.assertEqual([meter.zzz_shows(t) for t in (0, 0.999, 1.0, 1.999, 2.0, T0, T0 + 1.5)],
+                         [True, True, False, False, True, True, False], "a second there, a second gone")
+        for d in range(0, 2 * meter.lap_length(self.W)):
+            for ph, mark in ((VACANT, ""), (VACANT, meter.HOME), (HALT, meter.HOME), (HALT, meter.DOZE)):
+                there = self.paid(ph, 7, float(d), mark=mark)
+                gone = self.paid(ph, 7, float(d), mark=mark, zzz=False)
+                self.assertEqual(there.count("💤"), 1, there)
+                self.assertEqual(gone, there.replace("💤", "  ").rstrip(" "),
+                                 "nothing else moves, and what the zzz hides does not come back")
+            for ph, mark in ((RUN, ""), (RUN, meter.GUST), (RUN, meter.FIRE), (HALT, "")):
+                self.assertEqual(self.paid(ph, 7, float(d), mark=mark, zzz=False), self.paid(ph, 7, float(d), mark=mark),
+                                 "only a zzz blinks")
+        self.assertEqual(self.plain(VACANT, 7, 11.0, zzz=False), "🪙        🪙        🪙        🪙   🐌")
+
+    def test_lap_before_turns_back_into_coins_one_coin_at_a_time(self):
+        A, B, C, D = self.A, self.B, self.C, self.D
+        lap = meter.lap_length(self.W)
+        left = {A: 0.05, B: 0.002, C: 0.19, D: 1.2, 0: 0.03}
+        self.assertEqual(self.plain(RUN, 7, lap - 1.0, stamps=left), "🐘        💲1.20    💲0.19    🐾        💲0.05")
+        # The lap starts: only the coin ahead of the animal is back.
+        self.assertEqual(self.plain(RUN, 7, float(lap), stamps=left), "💲0.03    💲1.20    💲0.19    🐾        🪙    🐘")
+        # Each of the others comes back when the animal is a coin and a half away:
+        # halfway between two coins, so not as it eats one.
+        self.assertEqual(meter.REFILL, 15)
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(B + meter.REFILL + 1), stamps=left), "💲0.03    💲1.20    💲0.19    🐾        🪙    🐘")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(B + meter.REFILL), stamps=left), "💲0.03    💲1.20    💲0.19    🪙        🪙   🐘")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(A), stamps={B: 0.002, C: 0.19, D: 1.2, 0: 0.03}), "💲0.03    💲1.20    💲0.19    🪙        🐘",
+                         "the animal eats the first coin, and nothing ahead of it changes")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(A - 2), stamps={A: 0.3, B: 0.002, C: 0.19, D: 1.2, 0: 0.03}),
+                         "💲0.03    💲1.20    💲0.19    🪙      🐘💲0.30")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(C + meter.REFILL), stamps={A: 0.3, B: 0.002, C: 0.19, D: 1.2, 0: 0.03}),
+                         "💲0.03    💲1.20    🪙        🪙   🐘   💲0.30")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(B), stamps={A: 0.3, C: 0.19, D: 1.2, 0: 0.03}), "💲0.03    💲1.20    🪙        🐘        💲0.30")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(D), stamps={A: 0.3, B: 0.0, C: 0.0, 0: 0.03}), "🪙        🐘        🐾        🐾        💲0.30")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(meter.REFILL), stamps={A: 0.3, B: 0.0, C: 0.0, 0: 0.03}), "🪙        🪙   🐘   🐾        🐾        💲0.30")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(D - 2), stamps={A: 0.3, B: 0.0, C: 0.0, D: 0.0, 0: 0.03}), "🪙      🐘🐾        🐾        🐾        💲0.30",
+                         "the last to come back is the coin at the left end")
+        # Whatever the lap before left, and whatever the animal does meanwhile.
+        was = {A: meter.EATEN, B: meter.PRINTS, C: meter.EATEN, D: meter.EATEN, 0: meter.EATEN}
+        for ph, mark in ((RUN, ""), (RUN, meter.FIRE), (HALT, meter.DOZE), (VACANT, ""), (VACANT, meter.HOME)):
+            back = []
+            for d in range(lap):
+                x = meter.animal_column(float(d), self.W)
+                line = self.plain(ph, 7, float(d), mark=mark, stamps={c: usd for c, usd in left.items() if c < x})
+                self.assertNotEqual(line[0], " ", "the line never starts with a blank")
+                for c in (A, B, C, D, 0):
+                    if c + 1 < x:
+                        want = meter.COIN if x <= c + meter.REFILL else was[c]
+                        self.assertEqual(self.glyph_at(line, c), want, (ph, mark, d, c, line))
+                back.append(sum(1 for c in (A, B, C, D, 0) if x <= c + meter.REFILL))
+                self.assertLessEqual(columns(line), self.W + 2, line)
+            self.assertEqual(back[0], 1, "only the coin ahead at the start of the lap")
+            self.assertEqual(sorted(set(back)), [1, 2, 3, 4, 5], "then one at a time")
+            turns = [d for d in range(1, lap) if back[d] > back[d - 1]]
+            self.assertEqual(turns, [int(self.reach(c + meter.REFILL)) for c in (B, C, D, 0)],
+                             "each when the animal is a coin and a half away")
+            eats = [int(self.reach(c)) for c in (A, B, C, D, 0)]
+            leaves = [int(self.reach(c - 2)) for c in (A, B, C, D)]
+            self.assertEqual(set(turns) & set(eats + leaves), set(),
+                             "never as the animal eats a coin, nor as what it leaves shows")
 
     def test_every_lap_is_drawn_at_the_last_coin_whatever_the_redraw_interval(self):
         w = meter.TRACK
         lap = meter.lap_length(w)
         for step in (0.4, 1.0, 1.7):                 # seconds between redraws
             path = os.path.join(self.dir, "lap%d.run" % (step * 10))
-            columns_seen = [meter.animal_column(meter.advance(path, True, T0 + i * step, lap), w)
+            columns_seen = [meter.animal_column(meter.advance(path, True, T0 + i * step, lap)[0], w)
                             for i in range(int(3 * lap / step) + 5)]
             self.assertEqual(columns_seen[0], w - 2)
             for i, x in enumerate(columns_seen[1:], 1):
@@ -623,6 +706,261 @@ class MeterTest(unittest.TestCase):
             self.assertEqual((line.count(a + "🔥"), line.count("🔥")), (1, 1), line)
             self.assertLessEqual(columns(line), meter.TRACK + 2, line)
             self.assertEqual(line.index(a), self.plain(RUN, 7, float(d)).index(a), "the animal stays where it is")
+
+    # ---- the fare
+
+    def test_fare_has_as_many_decimals_as_fit_in_five_characters(self):
+        self.assertEqual(meter.FARE_MAX, 5)
+        for usd, text in ((0.006, "0.01"), (0.05, "0.05"), (1.239, "1.24"),
+                          (12.3, "12.30"), (99.99, "99.99"), (99.999, "100.0"), (123.44, "123.4"),
+                          (999.94, "999.9"), (999.96, "1000"), (1234.4, "1234"), (99999.4, "99999")):
+            self.assertEqual(meter.fare(usd), text, usd)
+        self.assertGreater(len(meter.fare(100000)), meter.FARE_MAX)
+
+    def test_amount_under_half_a_cent_has_no_fare_and_leaves_paw_prints(self):
+        A, B, C = self.A, self.B, self.C
+        at = self.reach(15)
+        self.assertEqual([meter.fare(usd) for usd in (0, 0.0, 0.004, 0.0049)], ["", "", "", ""])
+        self.assertEqual((len(meter.PRINTS), columns(meter.PRINTS)), (1, 2), "one code point, two columns, as the rest")
+        self.assertEqual(self.plain(RUN, 7, at, stamps={A: 0.0, B: 0.004, C: 0.05}),
+                         "🪙        🪙   🐘   💲0.05    🐾        🐾")
+        self.assertEqual(self.plain(RUN, 7, at, stamps={A: 0.0, B: 0.0, C: 0.0}),
+                         "🪙        🪙   🐘   🐾        🐾        🐾")
+        self.assertEqual(self.plain(RUN, 7, at, stamps={A: 0.0}), "🪙        🪙   🐘                       🐾",
+                         "an eaten coin without a stamp leaves nothing")
+        self.assertEqual(self.plain(RUN, 7, at), "🪙        🪙   🐘")
+        # They give way to the animal and what is behind it, as a dollar sign does.
+        for d in range(0, 2 * meter.lap_length(self.W)):
+            for ph, mark in ((RUN, ""), (RUN, meter.GUST), (VACANT, "")):
+                x = meter.animal_column(float(d), self.W)
+                line = self.plain(ph, 7, float(d), mark=mark, stamps={c: 0.0 for c in self.COINS if c >= x})
+                paid = self.paid(ph, 7, float(d), mark=mark)
+                self.assertEqual(line, paid.replace(meter.EATEN + "0.05", meter.PRINTS + " " * 4).rstrip(" "), (ph, mark, d))
+                self.assertLessEqual(columns(line), max(self.W, columns(self.plain(ph, 7, float(d), mark=mark))))
+        # A track of 15 columns has its last coin at column 10: three columns are left behind it.
+        self.assertEqual(meter.render(RUN, 7, 9.0, width=15, stamps={10: 0.0}), "🪙  🐘    🐾")
+
+    def test_cost_is_read_from_the_status_line_input_and_nothing_else_passes_for_one(self):
+        self.assertEqual(meter.cost_of({"cost": {"total_cost_usd": 1.25}}), 1.25)
+        self.assertEqual(meter.cost_of({"cost": {"total_cost_usd": 0}}), 0.0)
+        for data in ({}, {"cost": None}, {"cost": 3}, {"cost": {}}, {"cost": {"total_cost_usd": None}},
+                     {"cost": {"total_cost_usd": "1.25"}}, {"cost": {"total_cost_usd": True}},
+                     {"cost": {"total_cost_usd": -1}}, {"cost": {"total_cost_usd": float("nan")}},
+                     {"cost": {"total_cost_usd": float("inf")}}):
+            self.assertIsNone(meter.cost_of(data), data)
+
+    def walk(self, name, cost, steps):
+        """Run the animal a column a second. Yields (step, column, stamps, billed)."""
+        lap = meter.lap_length(self.W)
+        path = os.path.join(self.dir, name + ".run")
+        for i in range(steps):
+            dist, stamps = meter.advance(path, True, T0 + i, lap, cost(i))
+            self.assertEqual(meter.load_run(path)[3], stamps, "kept with the distance")
+            yield i, meter.animal_column(dist, self.W), stamps, meter.load_run(path)[4]
+
+    def fares(self, stamps):
+        """What each stamp leaves: its fare, or the paw prints."""
+        return {c: meter.fare_at(usd, c, self.W) or meter.PRINTS for c, usd in stamps.items()}
+
+    def test_coin_is_stamped_with_what_was_spent_since_the_fare_before_it(self):
+        A, B, C, D = self.A, self.B, self.C, self.D
+        lap = meter.lap_length(self.W)
+        at = lambda c: int(self.reach(c))           # the step at which the animal reaches a column
+        seen = {}
+        # The cost is a cent higher at every column: 1.00 when the animal starts.
+        for i, x, stamps, billed in self.walk("fare", lambda i: 1 + i / 100, lap + at(A) + 1):
+            seen[i] = (x, self.fares(stamps), billed)
+        self.assertEqual((at(A), at(B), at(C), at(D)), (6, 16, 26, 36))
+        self.assertEqual(seen[0], (self.W - 2, {}, 1.0), "the first reading: the fares count from here")
+        self.assertEqual(seen[5], (A + 1, {}, 1.0))
+        self.assertEqual(seen[6], (A, {A: "0.06"}, 1.06), "six columns, six cents")
+        self.assertEqual(seen[15], (B + 1, {A: "0.06"}, 1.06))
+        self.assertEqual(seen[16][:2], (B, {A: "0.06", B: "0.10"}), "not the 1.16 it has cost so far")
+        whole = {A: "0.06", B: "0.10", C: "0.10", D: "0.10"}
+        self.assertEqual(seen[36], (D, whole, 1 + 36 / 100))
+        # The lap ends on the coin at the left end. It is stamped as the others.
+        whole[0] = "0.09"
+        self.assertEqual(seen[lap - 1], (0, whole, 1 + 45 / 100), "nine columns from the one before it")
+        self.assertEqual(seen[lap], (self.W - 2, whole, 1 + 45 / 100), "the next lap starts with what this one left")
+        self.assertEqual(seen[lap + 5][1], whole)
+        self.assertEqual(seen[lap + 6][:2], (A, {**whole, A: "0.07"}), "its first fare takes the place of the old one")
+        self.assertEqual(seen[lap + 6][2], 1 + (lap + 6) / 100)
+
+    def test_amount_under_half_a_cent_goes_into_the_next_fare(self):
+        A, B, C, D = self.A, self.B, self.C, self.D
+        seen = {}
+        # A twenty-fifth of a cent a column.
+        for i, x, stamps, billed in self.walk("slow", lambda i: i / 2500, 37):
+            seen[i] = (self.fares(stamps), billed)
+        self.assertEqual(seen[6], ({A: meter.PRINTS}, 0.0), "0.24 cents at the first coin: paw prints, nothing billed")
+        self.assertEqual(seen[16], ({A: meter.PRINTS, B: "0.01"}, 16 / 2500), "0.64 cents by the second")
+        self.assertEqual(seen[26], ({A: meter.PRINTS, B: "0.01", C: meter.PRINTS}, 16 / 2500), "0.4 cents since")
+        self.assertEqual(seen[36], ({A: meter.PRINTS, B: "0.01", C: meter.PRINTS, D: "0.01"}, 36 / 2500),
+                         "0.8 cents since")
+        self.assertEqual(self.plain(RUN, 7, self.reach(D - 2), stamps=stamps),
+                         "🪙      🐘💲0.01    🐾        💲0.01    🐾")
+
+    def test_no_cost_no_fare_and_the_fares_count_from_the_first_reading(self):
+        A, B, C = self.A, self.B, self.C
+        last = None
+        for i, x, stamps, billed in self.walk("unknown", lambda i: None if i < 10 else 5 + i / 100, 27):
+            last = (x, self.fares(stamps), billed)
+            if i < 10:
+                self.assertEqual((stamps, billed), ({}, None), i)
+            elif i < 16:
+                self.assertEqual((stamps, billed), ({}, 5.1), "what it cost before is not this stretch's fare")
+        self.assertEqual(last, (C, {B: "0.06", C: "0.10"}, 5.26))
+
+    def test_fares_stay_while_the_animal_stands_or_sleeps(self):
+        A, B = self.A, self.B
+        lap = meter.lap_length(self.W)
+        path = os.path.join(self.dir, "stay.run")
+        for i, _x, stamps, billed in self.walk("stay", lambda i: 2.0 + (0.5 if i >= 3 else 0), 10):
+            pass
+        self.assertEqual((stamps, billed), ({A: 0.5}, 2.5))
+        dist = meter.load_run(path)[0]
+        self.assertEqual(meter.advance(path, False, T0 + 20, lap, 7.0), (dist, {A: 0.5}))
+        self.assertEqual(meter.advance(path, False, T0 + 500, lap, 8.0), (dist, {A: 0.5}))
+        self.assertEqual(meter.load_run(path)[4], 2.5, "what it cost while asleep waits for the next coin")
+        self.assertEqual(meter.advance(path, True, T0 + 501, lap, 9.0), (dist, {A: 0.5}),
+                         "the first redraw of a run moves nothing")
+        for i in range(502, 509):
+            dist, stamps = meter.advance(path, True, T0 + i, lap, 9.0)
+        self.assertEqual((meter.animal_column(dist, self.W), stamps), (B, {A: 0.5, B: 6.5}))
+
+    def test_cost_that_starts_over_is_counted_from_there(self):
+        A, B, C = self.A, self.B, self.C
+        stamps, billed = meter.stamped({A: 0.5}, 2.5, B + 1, B, 0.2)
+        self.assertEqual((stamps, billed), ({A: 0.5, B: 0.0}, 0.2), "no fare below zero")
+        stamps, billed = meter.stamped(stamps, billed, C + 1, C, 0.5)
+        self.assertEqual((self.fares(stamps), billed), ({A: "0.50", B: meter.PRINTS, C: "0.30"}, 0.5))
+
+    def test_coin_is_stamped_once_and_only_when_the_animal_reaches_it(self):
+        A, B = self.A, self.B
+        first = meter.stamped({}, 1.0, A + 1, A, 1.5)
+        self.assertEqual(first, ({A: 0.5}, 1.5))
+        self.assertEqual(meter.stamped({A: 0.5}, 1.5, A, A - 1, 9.0), first, "it is past that coin")
+        self.assertEqual(meter.stamped({A: 0.5}, 1.5, A - 2, A - 4, 9.0), first, "and short of the next")
+        self.assertEqual(meter.stamped({A: 0.5}, 1.5, B + 1, B, 2.0), ({A: 0.5, B: 0.5}, 2.0))
+        self.assertEqual(meter.stamped({A: 0.5}, 1.5, 2, 0, 3.0), ({A: 0.5, 0: 1.5}, 3.0), "the left end, as the others")
+        self.assertEqual(meter.stamped({A: 0.5}, 1.5, B + 1, B, None), first, "the cost is not known")
+        self.assertEqual(meter.stamped({}, None, A + 1, A, 7.0), ({A: 0.0}, 7.0),
+                         "the first reading: nothing spent since")
+        self.assertEqual(meter.stamped({}, None, A - 2, A - 3, 7.0), ({}, 7.0))
+
+    def test_stamp_of_the_lap_before_goes_when_the_animal_reaches_its_coin_again(self):
+        A, B = self.A, self.B
+        old = {A: 0.5, B: 0.5}
+        self.assertEqual(meter.stamped(old, 2.0, 0, self.W - 2, 4.0), (old, 2.0), "a new lap keeps what the last one left")
+        self.assertEqual(meter.stamped(old, 2.0, A + 2, A + 1, 4.0), (old, 2.0), "until the animal is there")
+        self.assertEqual(meter.stamped(old, 2.0, A + 1, A, 2.25), ({A: 0.25, B: 0.5}, 2.25), "a fare takes its place")
+        self.assertEqual(meter.stamped(old, 2.0, A + 1, A, 2.0), ({A: 0.0, B: 0.5}, 2.0), "or paw prints")
+        self.assertEqual(meter.stamped(old, 2.0, A + 1, A, None), ({B: 0.5}, 2.0), "or nothing: the cost is not known")
+        self.assertEqual(meter.stamped(old, 2.0, A + 1, A, 100002.0), ({B: 0.5}, 2.0), "or nothing: the fare does not fit")
+        self.assertEqual(old, {A: 0.5, B: 0.5}, "the stamps handed in are left alone")
+
+    def test_fare_that_does_not_fit_is_not_billed(self):
+        # A track of 15 columns has its last coin at column 10: three columns are left behind it.
+        self.assertEqual(list(meter.coin_columns(15)), [0, 10])
+        self.assertEqual(meter.stamped({}, 1.0, 11, 10, 1.05, 15), ({}, 1.0))
+        stamps, billed = meter.stamped({}, 1.0, 11, 10, 1.05, 16)
+        self.assertEqual(({c: meter.fare(usd) for c, usd in stamps.items()}, billed), ({10: "0.05"}, 1.05))
+        self.assertEqual(meter.stamped({}, 0.0, self.A + 1, self.A, 100000.0), ({}, 0.0), "six digits")
+
+    def test_run_file_of_an_older_version_is_read_and_a_broken_one_starts_over(self):
+        path = os.path.join(self.dir, "old.run")
+        with open(path, "w") as f:
+            f.write("12.000 %.3f 1" % T0)
+        self.assertEqual(meter.load_run(path), (12.0, T0, True, {}, None))
+        for broken in ("32:1.5 24:oops", "@much 32:1.5", "32"):
+            with open(path, "w") as f:
+                f.write("12.000 %.3f 1 %s" % (T0, broken))
+            self.assertEqual(meter.load_run(path), (0.0, 0.0, False, {}, None), broken)
+        meter.save_run(path, 12.0, T0, True, {24: 0.1 + 0.2, 32: 1.5}, 0.1 + 0.7)
+        self.assertEqual(meter.load_run(path), (12.0, T0, True, {24: 0.1 + 0.2, 32: 1.5}, 0.1 + 0.7),
+                         "to the last digit")
+        meter.save_run(path, 12.0, T0, False)
+        self.assertEqual(meter.load_run(path), (12.0, T0, False, {}, None))
+
+    def test_fare_follows_its_dollar_sign_and_moves_nothing(self):
+        A, B, C, D = self.A, self.B, self.C, self.D
+        w = self.W
+        stamps = {0: 1.5, D: 1.4, C: 1.31, B: 1.12, A: 1.07}
+        animals = {g for _, g in meter.ANIMALS}
+        for ph in (RUN, HALT, VACANT):
+            for mark in ("", meter.GUST, meter.HOME):
+                for d in range(0, 2 * meter.lap_length(w)):
+                    bare = self.plain(ph, 7, float(d), mark=mark)
+                    line = self.plain(ph, 7, float(d), mark=mark, stamps=stamps)
+                    x = meter.animal_column(float(d), w)
+                    self.assertLessEqual(columns(line), max(w, columns(bare)), line)
+                    self.assertEqual(line, line.rstrip(" "))
+                    standing = meter.HOUSE if mark == meter.HOME else meter.animal(0 if ph == VACANT else 7)
+                    self.assertEqual(columns(line[:line.index(standing)]), x, "nothing has pushed the animal aside")
+                    # What stands behind the animal: its zzz, the wind or nothing.
+                    behind = 2 if ph == VACANT or mark else 0
+                    for c in (A, B, C, D, 0):
+                        text = meter.EATEN + meter.fare(stamps[c])
+                        if c >= x + 2 + behind:
+                            self.assertEqual(self.glyph_at(line, c), meter.EATEN, (ph, mark, d, c))
+                            self.assertIn(text, line, "every eaten coin clear of the animal has its fare")
+                        elif c + 1 < x and x > c + meter.REFILL:
+                            self.assertIn(text, line, "the fare of the lap before still stands")
+                        elif c + 1 < x:
+                            self.assertEqual(self.glyph_at(line, c), meter.COIN, "a coin again")
+                            self.assertNotIn(text, line)
+                        else:
+                            self.assertNotIn(text, line, "no fare under the animal")
+                    self.assertEqual(set(line) - animals - set(" 💤💨" + meter.HOUSE + meter.COIN + meter.EATEN),
+                                     set("0123456789.") & set(line), line)
+        self.assertEqual(self.plain(RUN, 7, self.reach(16), stamps=stamps),
+                         "💲1.50    🪙    🐘  💲1.31    💲1.12    💲1.07", "the coin ahead is a coin, the left end is of the lap before")
+        self.assertEqual(self.plain(RUN, 7, self.reach(15), stamps=stamps),
+                         "🪙        🪙   🐘   💲1.31    💲1.12    💲1.07", "a column on, the left end is a coin too")
+        self.assertEqual(self.plain(RUN, 7, self.reach(36), stamps=stamps),
+                         "💲1.50    💲1.40    💲1.31    🪙    🐘  💲1.07", "three of the lap before, the coin ahead, one of this lap")
+        self.assertEqual(self.plain(RUN, 7, self.reach(15), stamps={}), self.plain(RUN, 7, self.reach(15)))
+
+    def glyph_at(self, line, column):
+        """The character of a line that starts at a column, if one does."""
+        col = 0
+        for ch in line:
+            if col == column:
+                return ch
+            col += columns(ch)
+        return None
+
+    def test_fare_that_does_not_fit_is_left_out_with_its_dollar_sign(self):
+        self.assertEqual(self.plain(RUN, 7, self.reach(15), stamps={self.A: 100000.0, self.B: 99999.0}),
+                         "🪙        🪙   🐘             💲99999")
+        # A track of 15 columns has its last coin at column 10: three columns are left behind it.
+        self.assertEqual(meter.render(RUN, 7, 9.0, width=15, stamps={10: 0.05}), "🪙  🐘")
+        self.assertEqual(meter.render(RUN, 7, 9.0, width=16, stamps={10: 0.05}), "🪙   🐘   💲0.05")
+        for width in range(12, self.W + 1):
+            for d in range(0, 2 * self.W):
+                line = meter.render(RUN, 7, float(d), width=width, stamps={c: 12.34 for c in range(10, 50, 10)})
+                self.assertLessEqual(columns(line), width, (width, d, line))
+
+    def test_status_line_draws_the_fare_of_its_input(self):
+        now = datetime.now(timezone.utc).timestamp()
+        self.write(prompt(now - 2))
+        self.data["cost"] = {"total_cost_usd": 3.456}
+        os.makedirs(os.path.join(self.dir, "taxi-horse"))
+        path = os.path.join(self.dir, "taxi-horse", "sess.run")
+        # The animal is one column short of the first coin and runs onto it.
+        # The fares so far come to 3 dollars.
+        meter.save_run(path, self.reach(self.A + 1), now - 2, True, {}, 3.0)
+        out = self.run_cli()
+        self.assertEqual((out.returncode, out.stderr), (0, ""))
+        self.assertNotIn("0.46", out.stdout, "the animal still stands on the coin")
+        dist, _t, _running, stamps, billed = meter.load_run(path)
+        self.assertEqual((dist, self.fares(stamps), billed), (self.reach(self.A - 1), {self.A: "0.46"}, 3.456))
+        # Two columns on, the dollar sign shows, with the fare of then.
+        meter.save_run(path, self.reach(self.A - 3), now + 60, True, stamps, billed)
+        self.data["cost"] = {"total_cost_usd": 9.99}
+        out = self.run_cli()
+        self.assertTrue(out.stdout.rstrip("\n").endswith(meter.EATEN + "0.46"), out.stdout)
+        self.assertEqual(self.run_cli("--state").stdout, "run 0\n", "the mod is told nothing of it")
 
     def test_narrow_terminal_shortens_the_track(self):
         old = os.environ.get("COLUMNS")

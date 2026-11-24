@@ -16,17 +16,22 @@ second at most.
     "statusLine": {"type": "command", "command": "/path/to/taxi-horse",
                    "refreshInterval": 1}
 
-The line is an animal and the coins it runs for: the tokens. No text, no
-number and no ground line.
+The line is an animal and the coins it runs for: the tokens. The only text
+is the fare behind a dollar sign (see below). There is no ground line.
     running    a request is out. The animal runs right to left and eats the
-               coins on its way: an eaten coin turns into a dollar sign behind
-               it. The faster tokens burn, the faster the animal:
+               coins on its way. In a coin's place it leaves a dollar sign
+               with the fare of the stretch up to it, or its paw prints when
+               that is less than half a cent. The faster tokens burn, the
+               faster the animal:
                one for each of the 17 speed levels, from a snail to an eagle.
                After the last coin, at the left end, it starts again from the
-               right with new coins laid out.
+               right. What it left on the lap before turns back into coins
+               one at a time, each when the animal is a coin and a half away
+               from it: never at the moment the animal eats a coin.
     standing   only tools are running
     asleep     between turns. Whatever it was, it sleeps as a snail.
-The animal stops, sleeps and starts again where it stands.
+The animal stops, sleeps and starts again where it stands. Every zzz blinks:
+ZZZ seconds there, ZZZ seconds gone.
 
 The animal is the average speed. What goes behind it is the speed of the
 moment, the last GUST_WINDOW seconds, against that average:
@@ -42,6 +47,18 @@ a response only show when it is complete (see below).
 When the average is 0 too, no token for WINDOW seconds, and no request is
 out, the animal goes into its house to sleep: a house stands in its place,
 with its zzz. A session that has not started yet is at home as well.
+
+The fare behind a dollar sign is what the session has cost, in US dollars,
+since the fare before it: the price of that stretch, not the total. The cost
+is the one /cost totals: "cost.total_cost_usd" of the status line input here,
+$.session.usage() in the mod. It is Claude Code's own estimate at list price,
+not a bill, and on a subscription no charge at all. A coin is stamped when the
+animal reaches it and keeps its fare until its place turns back into a coin
+on the next lap. An amount of less than half a cent makes no fare: paw prints
+are left in the coin's place, and the amount goes into the next fare, so
+nothing spent is left out. The fares count from the meter's first reading of
+the cost. A fare takes FARE_MAX characters at most: "0.42", "12.34", "123.4",
+"1234". When the cost is not known, an eaten coin leaves nothing.
 
 The speed is the number of tokens the meter registered in the last WINDOW
 seconds, per second. The tokens counted are input + cache write + output
@@ -95,7 +112,7 @@ IDS_MAX = 3000           # responses remembered for de-duplication
 STATE_VERSION = 3
 STATE_MAX_AGE = 2 * 86400
 
-TRACK = 40               # length of the track in columns
+TRACK = 48               # length of the track in columns
 STEP = 1.0               # columns a second. The status line is redrawn once a second
                          # at most, so anything faster would be a jump of several columns.
 LEVEL_MAX = 16           # speed levels run from 0 to this
@@ -103,6 +120,7 @@ GUST_WINDOW = 10.0       # seconds the speed of the moment is taken over
 GUST_FACTOR = 3.0        # a gust: the moment is this many times the average
 FIRE_FACTOR = 3.0        # fire: a gust at this many times the speed the fastest animal starts at
 DOZE_AFTER = 10.0        # seconds without a token before a standing animal dozes
+ZZZ = 1.0                # seconds a zzz is there, and seconds it is gone, as it blinks
 # The level of a rate is the share of this user's earlier rates that were
 # lower, cut into LEVEL_MAX + 1 equal parts. Until there is a history a guess
 # stands in for it: rates spread evenly, on a log scale, from RATE_MIN to RATE_MAX.
@@ -469,32 +487,85 @@ def learn(root=None, limit=200, path=None):
 
 
 def load_run(path):
+    """(distance, time, was it running, stamps, billed) as advance() left them."""
     try:
         with open(path) as f:
-            dist, t, running = f.read().split()
-        return float(dist), float(t), running == "1"
+            dist, t, running, *rest = f.read().split()
+        stamps, billed = {}, None
+        for word in rest:
+            if word.startswith("@"):
+                billed = float(word[1:])
+            else:
+                c, usd = word.split(":")
+                stamps[int(c)] = float(usd)
+        return float(dist), float(t), running == "1", stamps, billed
     except (OSError, ValueError):
-        return 0.0, 0.0, False
+        return 0.0, 0.0, False, {}, None
 
 
-def save_run(path, dist, t, running):
+def save_run(path, dist, t, running, stamps=None, billed=None):
     tmp = "%s.%d.tmp" % (path, os.getpid())
     with open(tmp, "w") as f:
         f.write("%.3f %.3f %d" % (dist, t, running))
+        if billed is not None:
+            f.write(" @%r" % billed)
+        for c, usd in sorted((stamps or {}).items()):
+            f.write(" %d:%r" % (c, usd))
     os.replace(tmp, path)
 
 
-def advance(path, running, now, lap):
-    """Move the animal and return how far it has run so far, in columns.
+def stamped(stamps, billed, before, x, usd, width=None):
+    """The fares after the animal has moved from column before to column x.
+
+    stamps: {coin column: amount}, what the animal has left in the place of
+    each coin: behind it on this lap, ahead of it on the lap before. billed:
+    the cost up to which fares have been stamped, None before the first
+    reading of it. usd: the session's cost so far, None when it is not known.
+
+    A coin the animal has reached on the way loses the stamp of the lap
+    before and is stamped with what the session has cost since billed. When
+    that makes a fare that is drawn, it is billed. An amount that makes none
+    stays unbilled and goes into the next fare: one of less than half a cent
+    is still stamped, for its paw prints, and one whose fare does not fit is
+    not.
+    The coin at the left end is stamped as the others: the lap ends on it, so
+    what it leaves shows on the next lap.
+
+    Returns (stamps, billed).
+    """
+    if width is None:
+        width = TRACK
+    if usd is not None and (billed is None or usd < billed):
+        billed = usd                     # the first reading, or the cost has started over
+    for c in reversed(coin_columns(width)):
+        if x <= c < before:
+            stamps = dict(stamps)
+            stamps.pop(c, None)
+            if usd is None:
+                continue
+            amount = usd - billed
+            if fare_at(amount, c, width):
+                stamps[c] = amount
+                billed = usd
+            elif not fare(amount):
+                stamps[c] = amount
+    return stamps, billed
+
+
+def advance(path, running, now, lap, usd=None):
+    """Move the animal. Returns how far it has run so far, in columns, and the
+    stamps it has left.
 
     The distance is kept in a file of its own: the animal stops and starts
-    again where it stands.
+    again where it stands. The fares are kept with it.
 
     lap: positions in one lap. The last one is the left end, where the coin
     is. The animal is drawn there once on every lap, and the redraw after that
     starts the next lap at the right end.
+
+    usd: the session's cost so far, when known (see stamped()).
     """
-    dist, t, was_running = load_run(path)
+    dist, t, was_running, stamps, billed = load_run(path)
     if running:
         # The first redraw after a stop moves nothing, and a gap in the redraws
         # is not a leap.
@@ -503,18 +574,24 @@ def advance(path, running, now, lap):
         lap_no, pos = divmod(int(dist), lap)
         if int(new) // lap > lap_no:
             new = float(lap_no * lap + lap - 1) if pos < lap - 1 else float((lap_no + 1) * lap)
+        width = lap + 2
+        stamps, billed = stamped(stamps, billed, animal_column(dist, width), animal_column(new, width),
+                                 usd, width)
         dist = new % (lap * 100000)
-        save_run(path, dist, now, True)
+        save_run(path, dist, now, True, stamps, billed)
     elif was_running:
-        save_run(path, dist, now, False)
-    return dist
+        save_run(path, dist, now, False, stamps, billed)
+    return dist, stamps
 
 
 # ---------------------------------------------------------------- drawing
 
 COIN = "🪙"
-EATEN = "💲"                         # what a coin turns into once the animal has passed it
-COIN_GAP = 8                         # a coin every so many columns, from the left end
+EATEN = "💲"                         # what stands in an eaten coin's place, in front of its fare
+PRINTS = "🐾"                        # what stands there when the stretch has cost less than half a cent
+COIN_GAP = 10                        # a coin every so many columns, from the left end
+REFILL = COIN_GAP * 3 // 2           # columns ahead of the animal at which what it left turns back into a coin
+FARE_MAX = 5                         # characters of a fare at most: it ends well before the next coin
 # The animal for each speed level, slowest first: (lowest level, glyph). All of
 # them face left in Noto Color Emoji and are one code point two columns wide.
 # snail, turtle, hedgehog, mouse, rooster, pig, sheep, elephant, camel, dog,
@@ -527,6 +604,44 @@ HOUSE = "🏠"                         # what stands in place of an animal that 
 
 def animal(lvl):
     return [glyph for lowest, glyph in ANIMALS if lvl >= lowest][-1]
+
+
+def coin_columns(width=TRACK):
+    """Left column of every coin of a lap."""
+    return range(0, width - 4, COIN_GAP)
+
+
+def cost_of(data):
+    """The session's cost so far in a status line input, in US dollars, or
+    None when it carries none."""
+    cost = data.get("cost")
+    usd = cost.get("total_cost_usd") if isinstance(cost, dict) else None
+    if isinstance(usd, bool) or not isinstance(usd, (int, float)) or not 0 <= usd < math.inf:
+        return None
+    return float(usd)
+
+
+def fare(usd):
+    """An amount as the digits behind a dollar sign: as many decimals, two at
+    most, as fit in FARE_MAX characters. Halves round up, as in the mod. An
+    amount of less than half a cent has no fare: ""."""
+    if math.floor(usd * 100 + 0.5) < 1:
+        return ""
+    for digits in (2, 1, 0):
+        unit = 10 ** digits
+        n = int(math.floor(usd * unit + 0.5))
+        text = "%d.%0*d" % (n // unit, digits, n % unit) if digits else "%d" % n
+        if len(text) <= FARE_MAX:
+            break
+    return text
+
+
+def fare_at(usd, c, width):
+    """The fare drawn for an amount behind a dollar sign at column c: "" when
+    the amount has none, or it does not fit before the next dollar sign and on
+    the track."""
+    text = fare(usd)
+    return text if len(text) <= min(FARE_MAX, width - c - 2) else ""
 
 
 def track_width():
@@ -552,28 +667,56 @@ def animal_column(dist, width=TRACK):
     return 0 if pos == lap - 1 else width - 2 - pos
 
 
-def render(ph, lvl, dist, catching_up=False, width=None, mark=""):
-    """The line: coins ahead of the animal, dollar signs behind it, and right
-    behind it its zzz when asleep, or the wind, fire or zzz of its mark. At
-    home, its house stands in its place."""
+def zzz_shows(now):
+    """Is the zzz of a sleeping animal there at this time, or gone, as it blinks."""
+    return int(now // ZZZ) % 2 == 0
+
+
+def render(ph, lvl, dist, catching_up=False, width=None, mark="", stamps=None, zzz=True):
+    """The line: coins ahead of the animal, fares behind it, and right behind
+    it its zzz when asleep, or the wind, fire or zzz of its mark. At home, its
+    house stands in its place.
+
+    stamps: {coin column: amount}. An eaten coin at such a column leaves a
+    dollar sign and the fare of that amount (see fare_at()), or paw prints
+    when the amount is less than half a cent. Any other eaten coin leaves
+    nothing.
+
+    A stamp ahead of the animal is what it left there on the lap before. It
+    stays in the coin's place until the animal is REFILL columns away, so the
+    lap before turns back into coins one coin at a time. That is halfway
+    between two coins: nothing else on the line changes at that moment.
+
+    zzz: False while a zzz is gone, as it blinks. Its place stays empty: what
+    it hides does not come back meanwhile."""
     if width is None:
         width = track_width()
     x = animal_column(dist, width)
     # Two-column glyphs by their left column. The animal and what is right
-    # behind it come first: a coin or a dollar sign they would overlap is left
-    # out.
+    # behind it come first: a coin or a fare they would overlap is left out.
     glyphs = {x: HOUSE if mark == HOME else animal(0 if ph == VACANT else lvl)}
     behind = "💤" if ph == VACANT else BEHIND.get(mark)
     if behind:
-        glyphs[x + 2] = behind
-    for c in range(0, width - 4, COIN_GAP):
-        if not any(abs(c - taken) < 2 for taken in list(glyphs)):
-            glyphs[c] = COIN if c < x else EATEN
+        glyphs[x + 2] = behind if zzz or behind != "💤" else "  "
+    fares = {}                           # one-column characters by their first column
+    for c in coin_columns(width):
+        if any(abs(c - taken) < 2 for taken in list(glyphs)):
+            continue
+        if c < x and not (stamps and c in stamps and x > c + REFILL):
+            glyphs[c] = COIN
+        elif stamps and c in stamps and fare_at(stamps[c], c, width):
+            glyphs[c] = EATEN
+            fares[c + 2] = fare_at(stamps[c], c, width)
+        elif stamps and c in stamps and not fare(stamps[c]):
+            glyphs[c] = PRINTS
     line, col = "", 0
     while col < max(width, max(glyphs) + 2):
         if col in glyphs:
             line += glyphs[col]
             col += 2
+        elif col in fares:
+            line += fares[col]
+            col += len(fares[col])
         else:
             line += " "
             col += 1
@@ -587,7 +730,7 @@ def render(ph, lvl, dist, catching_up=False, width=None, mark=""):
 
 def measure(data, now, directory=None, budget=SCAN_BUDGET, rates=None):
     """Return (state, tok/s, tokens counted, catching_up, distance run, level,
-    mark) for a status line input."""
+    mark, stamps) for a status line input."""
     transcript = data.get("transcript_path")
     session = os.path.basename(str(data.get("session_id") or "unknown"))
     directory = directory or state_dir()
@@ -638,8 +781,8 @@ def measure(data, now, directory=None, budget=SCAN_BUDGET, rates=None):
         if created:
             drop_old_states(directory, now)
         save_state(path, st)
-    dist = advance(os.path.join(directory, session + ".run"), ph == RUN, now,
-                   lap_length(track_width()))
+    dist, stamps = advance(os.path.join(directory, session + ".run"), ph == RUN, now,
+                           lap_length(track_width()), cost_of(data))
     debug = os.environ.get("TAXI_HORSE_DEBUG")
     if debug:
         tails = " ".join("%s:%s/%d/%.0fs" % (k or "main", fs["tail"] or "-", fs["pend"],
@@ -649,7 +792,7 @@ def measure(data, now, directory=None, budget=SCAN_BUDGET, rates=None):
             f.write("%.3f %s %s rate=%.1f level=%d mark=%s dist=%.1f counted=%d new=%s %s\n"
                     % (now, session[:8], ph, tok_s, lvl, mk or "-", dist, burned(st["tot"]),
                        bool(changed), tails))
-    return ph, tok_s, burned(st["tot"]), not complete, dist, lvl, mk
+    return ph, tok_s, burned(st["tot"]), not complete, dist, lvl, mk, stamps
 
 
 MOD_FRESH = 3.0          # seconds a mod's sign of life counts for
@@ -664,21 +807,26 @@ def mod_draws(directory, session, now):
 
 
 def demo():
-    def show(ph, lvl, dist, note, mark=""):
-        line = render(ph, lvl, dist, mark=mark)
+    def show(ph, lvl, dist, note, mark="", stamps=None):
+        line = render(ph, lvl, dist, mark=mark, stamps=stamps)
         pad = TRACK + 4 - sum(1 + (ord(ch) > 0x1F000) for ch in line)
         print(line + " " * pad, note)
 
-    show(VACANT, 0, 12.0, "<- at home: asleep, and the average is 0 too", HOME)
-    show(VACANT, 0, 12.0, "<- asleep: between turns")
-    show(HALT, 7, 12.0, "<- standing: tools running")
-    show(HALT, 7, 12.0, "<- dozing: standing, and no token for a while", DOZE)
+    left = {40: 0.05, 30: 0.002, 20: 0.19, 10: 1.2, 0: 0.03}     # what a lap may leave, by coin column
+    show(VACANT, 0, 11.0, "<- at home: asleep, and the average is 0 too", HOME)
+    show(VACANT, 0, 11.0, "<- asleep: between turns")
+    show(HALT, 7, 11.0, "<- standing: tools running")
+    show(HALT, 7, 11.0, "<- dozing: standing, and no token for a while", DOZE)
     for lvl in range(LEVEL_MAX + 1):
-        show(RUN, lvl, 13.0, "<- running, level %d" % lvl)
-    show(RUN, 7, 13.0, "<- wind: it has just sped up", GUST)
-    show(RUN, 7, 13.0, "<- fire: it has just sped up, to a great speed", FIRE)
-    show(RUN, 7, 25.0, "<- three coins eaten: dollar signs behind it")
-    show(RUN, 7, lap_length() - 1.0, "<- at the left end: the last coin is eaten")
+        show(RUN, lvl, 15.0, "<- running, level %d" % lvl)
+    show(RUN, 7, 15.0, "<- wind: it has just sped up", GUST)
+    show(RUN, 7, 15.0, "<- fire: it has just sped up, to a great speed", FIRE)
+    show(RUN, 7, 31.0, "<- three coins eaten: the fare of each stretch, or paw prints for less than half a cent",
+         stamps={c: usd for c, usd in left.items() if c >= 20})
+    show(RUN, 7, lap_length() - 1.0, "<- at the left end: the last coin is eaten", stamps=left)
+    show(RUN, 7, float(lap_length()), "<- the next lap: only the coin ahead is back", stamps=left)
+    show(RUN, 7, lap_length() + 9.0, "<- and the others turn back into coins one at a time, ahead of the animal",
+         stamps=left)
 
 
 def show_levels():
@@ -704,11 +852,11 @@ def main():
     now = time.time()
     directory = state_dir()
     session = os.path.basename(str(data.get("session_id") or "unknown"))
-    ph, _tok_s, _counted, catching_up, dist, lvl, mk = measure(data, now, directory)
+    ph, _tok_s, _counted, catching_up, dist, lvl, mk, stamps = measure(data, now, directory)
     if "--state" in sys.argv:
         print(("%s %d %s" % (ph, lvl, mk)).rstrip())
     elif not mod_draws(directory, session, now):
-        print(render(ph, lvl, dist, catching_up, mark=mk))
+        print(render(ph, lvl, dist, catching_up, mark=mk, stamps=stamps, zzz=zzz_shows(now)))
 
 
 def cli():

@@ -8,16 +8,26 @@ running under the input box.
 ❯
 ────────────────────────────────────────────────
   ⏵⏵ bypass permissions on (shift+tab to cycle)
-  🪙      🪙     🐘       💲      💲
+  🪙        🪙   🐘   💲0.19    🐾        💲0.05
 ```
 
 - The animal runs right to left while a request is out, stands while tools
-  run and sleeps between turns, always as a snail (`🐌💤`).
+  run and sleeps between turns, always as a snail (`🐌💤`). Every zzz
+  blinks: a second there, a second gone.
 - When the average speed is 0 too, two minutes after the last token, and
   no request is out, it goes into its house to sleep (`🏠💤`). A session
   that has not started yet is at home as well.
-- It eats the coins on its way: an eaten coin turns into `💲` behind it.
-  After the last coin it starts again from the right.
+- It eats the coins on its way. After the last coin it starts again from
+  the right. What it left on the lap before turns back into coins one at a
+  time, each when the animal is a coin and a half away from it: never at
+  the moment the animal eats a coin.
+- Where a coin was, a `💲` with the fare is left: what the session has cost,
+  in US dollars, since the fare before it. It is the price of that stretch,
+  not the total, and it stays until its place turns back into a coin on the
+  next lap. A stretch that cost less than half a cent leaves paw prints
+  (`🐾`), and the amount goes into the next fare. The cost is the estimate `/cost`
+  shows: list price, not a bill, and on a subscription no charge at all.
+  Where Claude Code gives no cost, an eaten coin leaves nothing.
 - The kind of animal is the speed, averaged over two minutes: 17 of them,
   from a snail to an eagle. Which speed gets which animal follows the
   user's own history, so everyone sees the whole range.
@@ -28,7 +38,7 @@ running under the input box.
 - When the animal changes into another, or wakes up, a poof (`💥`) stands
   in its place for a moment. Falling asleep and going home have none.
 - The faster it runs, the more often it is redrawn, one column at a time.
-- There is no text and no number on the line.
+- The fare is the only text on the line.
 
 The plugin is a mod (`hooks/register.tsx`) that draws the line and a script
 (`taxi-horse`, `meter.py`) that counts the tokens. The mod runs the script
@@ -64,7 +74,7 @@ is there.
 The steps below are the same install, written so that a coding agent can
 follow them. Run them in order. Each step says what to expect.
 
-Tested with Claude Code 2.1.330 and git 2.43 on Linux, and with Python 3.7,
+Tested with Claude Code 2.1.331 and git 2.43 on Linux, and with Python 3.7,
 3.8, 3.9, 3.10, 3.12, 3.13 and 3.14.
 
 ### 0. Before you start
@@ -98,7 +108,7 @@ with the `python3` that is first on `PATH`:
 
 ```sh
 TAXI=$(ls -dt ~/.claude/plugins/cache/taxi-horse/taxi-horse/*/taxi-horse | head -n 1)
-"$TAXI" --demo                    # prints 25 lines of coins and animals, exit 0
+"$TAXI" --demo                    # prints 27 lines of coins and animals, exit 0
 ```
 
 If a coin or an animal shows as an empty box, the terminal has no colour
@@ -214,7 +224,8 @@ under the input box.
 | Path | Use |
 | --- | --- |
 | the session's transcript, and `subagents/` beside it | read: token counts of each response |
-| `$XDG_RUNTIME_DIR/taxi-horse/<session id>.*` | written: the meter's progress, the mod's sign of life. On tmpfs. |
+| the session's cost: asked of the session by the mod, `cost.total_cost_usd` of the input as the `statusLine` command | read: the fare |
+| `$XDG_RUNTIME_DIR/taxi-horse/<session id>.*` | written: the meter's progress, where the animal is and the fares of its lap, the mod's sign of life. On tmpfs. |
 | `$XDG_STATE_HOME/taxi-horse/rates.json` (default `~/.local/state`) | written at most once a minute by a busy session: the speed history |
 | `~/.claude/projects/*/*.jsonl` | read by `--learn` only |
 
