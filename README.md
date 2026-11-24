@@ -39,27 +39,33 @@ or, typed at the prompt of a Claude Code session:
 /plugin install taxi-horse --marketplace Daejun/taxi-horse
 ```
 
+Nothing has to be checked or installed first. The plugin needs Python 3.7
+or newer and looks for it by itself when a session starts: `/usr/bin/python3`,
+then `python3` and `python` on `PATH`. When there is none, the row says so
+in place of the picture:
+
+```
+  ⏵⏵ bypass permissions on (shift+tab to cycle)
+  taxi-horse needs Python 3.7 or newer: python3 not found
+```
+
+It looks again every 30 seconds, so the picture comes by itself once Python
+is there.
+
 The steps below are the same install, written so that a coding agent can
 follow them. Run them in order. Each step says what to expect.
 
-Tested with Claude Code 2.1.330, Python 3.12.3 and git 2.43 on Linux.
+Tested with Claude Code 2.1.330 and git 2.43 on Linux, and with Python 3.7,
+3.8, 3.9, 3.10, 3.12, 3.13 and 3.14.
 
 ### 0. Before you start
 
-- Step 2 changes `~/.claude/settings.json`, which applies to every session
+- Step 1 changes `~/.claude/settings.json`, which applies to every session
   of the user. If the user has not asked for that, ask first.
-- Step 2 clones this repository from github.com over HTTPS. The repository
+- Step 1 clones this repository from github.com over HTTPS. The repository
   is public: no GitHub account is needed. Nothing here needs root.
 
-### 1. Check the prerequisites
-
-```sh
-/usr/bin/python3 --version        # the launcher's shebang is /usr/bin/python3
-claude --version
-git --version
-```
-
-### 2. Install the plugin
+### 1. Install the plugin
 
 ```sh
 claude plugin install taxi-horse --marketplace Daejun/taxi-horse --scope user
@@ -78,7 +84,8 @@ taxi-horse@taxi-horse
 ```
 
 Claude Code keeps its copy of the plugin under `~/.claude/plugins/cache`.
-The script in that copy is what the later steps run:
+The script in that copy is what the later steps run. From a shell it runs
+with the `python3` that is first on `PATH`:
 
 ```sh
 TAXI=$(ls -dt ~/.claude/plugins/cache/taxi-horse/taxi-horse/*/taxi-horse | head -n 1)
@@ -96,7 +103,7 @@ a restart.
 Do not set taxi-horse as the `statusLine` command as well: see "The other
 way to run it" below.
 
-### 3. Seed the speed history (optional)
+### 2. Seed the speed history (optional)
 
 ```sh
 "$TAXI" --learn
@@ -107,7 +114,7 @@ writes `~/.local/state/taxi-horse/rates.json`. It prints the number of
 samples and the speed at which each animal starts. Without this step the
 meter starts from a built-in range and adapts as the user works.
 
-### 4. Verify
+### 3. Verify
 
 What the mod runs, without touching any real state:
 
@@ -119,7 +126,7 @@ rm -r "$D"
 
 It prints `vacant 0`: no turn is running, speed level 0. Exit status 0.
 
-In a session started after step 2, once it has run for a few seconds:
+In a session started after step 1, once it has run for a few seconds:
 
 ```sh
 ls -l "$XDG_RUNTIME_DIR/taxi-horse/"
@@ -158,7 +165,7 @@ claude plugin install taxi-horse@taxi-horse --scope user
 
 `claude plugin list` then shows `Read from:` and the clone's path. An edit
 shows in a session after `/reload-plugins`. Moving or deleting the clone
-removes the line. In steps 3 and 4, `TAXI` is `taxi-horse` in the clone.
+removes the line. In steps 2 and 3, `TAXI` is `taxi-horse` in the clone.
 
 ## Uninstall
 
@@ -231,7 +238,11 @@ claude plugin validate .          # the marketplace, the manifest, the mod's typ
 
 - No line in a session: the plugin is not loaded there. Type
   `/reload-plugins` in it or restart it, and check `claude plugin list`.
-- No line in any session: run the step 4 check. Anything but `vacant 0`
+- A line of text in place of the picture: the plugin cannot run its script,
+  and the text is the reason. `taxi-horse needs Python 3.7 or newer: ...`
+  means no Python was found, or only an older one. Any other text is the
+  last line of the script's error: run the step 3 check to see all of it.
+- No line in any session: run the step 3 check. Anything but `vacant 0`
   and exit 0 is the script failing; its traceback is on stderr.
 - An empty row under the input box: taxi-horse is also set as `statusLine`.
   Remove that setting.

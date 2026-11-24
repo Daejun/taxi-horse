@@ -5,6 +5,9 @@ import type { Register } from 'claude-code'
 //
 // meter.py counts the tokens. Once a second this mod runs "taxi-horse --state"
 // with the session id and the transcript path, and gets back "<state> <level>".
+// It finds the Python to run it with by itself, and when there is none the row
+// says so: a plugin has nothing that runs when it is installed, so this is
+// where a missing prerequisite shows.
 // Between two answers it only moves the animal: one column a redraw, and as
 // many redraws a second as the speed level, so the animal never jumps. A
 // statusLine command could not do that: its row is redrawn once a second at
@@ -27,6 +30,18 @@ const POLL_MS = 1000
 const IDLE_MS = 1000
 // How long a sign of life of another copy of this mod counts for.
 const TWIN_FRESH_MS = 2500
+// Where Python may be, in the order tried. The system's comes first: it has no
+// version manager's shim in front of it.
+const PYTHONS: readonly string[] = ['/usr/bin/python3', 'python3', 'python']
+// The oldest Python 3 the meter's tests pass with: 3.7. With 3.6 it counts
+// nothing.
+const PYTHON_MIN = 7
+// Python 2 refuses -I, so it never answers this.
+const PROBE = 'import sys; print(sys.version_info[0], sys.version_info[1], sys.executable)'
+// How long to wait before looking for Python again when there was none.
+const RETRY_MS = 30000
+// How many answers in a row may be missing before the row says so.
+const FAILURES_SHOWN = 3
 
 export type Phase = 'run' | 'halt' | 'vacant'
 
@@ -85,8 +100,57 @@ export function parseLive(text: string): { phase: Phase; level: number } | undef
   return { phase, level: n }
 }
 
+// Runs a program and resolves with what it wrote and its exit status; rejects
+// when the program does not start.
+export type Run = (argv: readonly string[]) => Promise<{ exitCode: number; stdout: string }>
+
+export function parseProbe(text: string): { major: number; minor: number; path: string } | undefined {
+  const [major, minor, ...path] = text.trim().split(' ')
+  const version = [Number(major), Number(minor)]
+  if (major === undefined || minor === undefined || !version.every(Number.isInteger)) {
+    return undefined
+  }
+
+  return { major: Number(major), minor: Number(minor), path: path.join(' ') }
+}
+
+// The Python to run the meter with: the first of the candidates that is
+// Python 3.7 or newer, by the path it gives for itself. Without one, the line
+// to show instead of the picture.
+export async function findPython(
+  run: Run,
+  candidates: readonly string[] = PYTHONS,
+): Promise<{ path: string } | { problem: string }> {
+  let old: string | undefined
+  for (const candidate of candidates) {
+    let answer: ReturnType<typeof parseProbe>
+    try {
+      const { exitCode, stdout } = await run([candidate, '-IS', '-c', PROBE])
+      answer = exitCode === 0 ? parseProbe(stdout) : undefined
+    } catch {
+      continue
+    }
+    if (answer === undefined) {
+      continue
+    }
+    if (answer.major === 3 && answer.minor >= PYTHON_MIN) {
+      return { path: answer.path === '' ? candidate : answer.path }
+    }
+    old ??= `${answer.major}.${answer.minor}`
+  }
+  const found = old === undefined ? 'python3 not found' : `found ${old}`
+
+  return { problem: `taxi-horse needs Python 3.${PYTHON_MIN} or newer: ${found}` }
+}
+
+// The last line of what a failed meter wrote: the error, under its traceback.
+export function lastLine(text: string): string {
+  return text.trim().split('\n').pop()?.trim() ?? ''
+}
+
 export const register: Register = on => {
-  // What is drawn now; undefined until the meter has answered.
+  // What is drawn now: the picture, or why there is none. Undefined until the
+  // meter has answered.
   let shown: string | undefined
 
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
@@ -118,6 +182,11 @@ export const register: Register = on => {
     let dist = 0
     let polledAt = 0
     let isDrawing = false
+    // The Python found, and what the row says when the picture cannot be drawn.
+    let python: string | undefined
+    let problem: string | undefined
+    let probedAt = -RETRY_MS
+    let failures = 0
 
     // The sign of life: <session>.mod, signed with this copy's number. A
     // statusLine command of taxi-horse prints nothing while it is fresh, and
@@ -142,21 +211,55 @@ export const register: Register = on => {
         const session = await $.session.id()
         if (runtime !== undefined && (await standsBack(`${runtime}/taxi-horse/${session}.mod`, now))) {
           isDrawing = false
+          problem = undefined
 
           return
         }
+        if (python === undefined) {
+          if (now - probedAt < RETRY_MS) {
+            return
+          }
+          probedAt = now
+          const found = await findPython(argv => $.process.run([...argv], { timeoutMs: 5000 }))
+          if ('problem' in found) {
+            isDrawing = false
+            problem = found.problem
+
+            return
+          }
+          python = found.path
+        }
         const { transcriptPath } = await $.session.info()
-        const { exitCode, stdout } = await $.process.run([meter, '--state'], {
+        // The launcher is run by the Python found, not through its first line:
+        // that one takes whatever python3 is first on PATH.
+        const { exitCode, stdout, stderr } = await $.process.run([python, '-IS', meter, '--state'], {
           stdin: JSON.stringify({ session_id: session, transcript_path: transcriptPath }),
           timeoutMs: 5000,
         })
         const live = exitCode === 0 ? parseLive(stdout) : undefined
-        if (live === undefined) throw new Error('no answer from the meter')
+        if (live === undefined) {
+          isDrawing = false
+          failures += 1
+          if (failures >= FAILURES_SHOWN) {
+            problem = `taxi-horse: ${lastLine(stderr) || `the meter exited with status ${exitCode}`}`
+          }
+
+          return
+        }
+        failures = 0
+        problem = undefined
         phase = live.phase
         level = live.level
         isDrawing = true
       } catch {
+        // The meter did not start or did not finish. After a few times in a
+        // row, look for Python again: it may have moved.
         isDrawing = false
+        failures += 1
+        if (failures >= FAILURES_SHOWN) {
+          failures = 0
+          python = undefined
+        }
       }
     }
 
@@ -171,7 +274,7 @@ export const register: Register = on => {
           dist += 1
           wait = Math.round(1000 / Math.max(1, level))
         }
-        const line = isDrawing ? render(phase, level, dist) : undefined
+        const line = isDrawing ? render(phase, level, dist) : problem
         if (line !== shown) {
           shown = line
           $.ui.invalidate('ui.render')

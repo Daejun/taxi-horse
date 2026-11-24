@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { animal, animalColumn, parseLive, render } from './register'
-import type { Phase } from './register'
+import { animal, animalColumn, findPython, lastLine, parseLive, parseProbe, render } from './register'
+import type { Phase, Run } from './register'
 
 // What meter.py draws for the same state, level and distance: generated from
 // meter.render() and meter.animal_column(). The two must stay the same picture.
@@ -1476,4 +1476,68 @@ test('reads what meter.py leaves and refuses anything else', async () => {
   expect(parseLive('')).toBeUndefined()
   expect(parseLive('gallop 3')).toBeUndefined()
   expect(parseLive('run fast')).toBeUndefined()
+})
+
+// A machine by what each program name answers to the probe: its output, its
+// exit status when it fails, or nothing when it is not there.
+function machine(programs: Record<string, string | number>): { run: Run; tried: string[] } {
+  const tried: string[] = []
+  const run: Run = async argv => {
+    const name = argv[0] ?? ''
+    tried.push(name)
+    const answer = programs[name]
+    if (answer === undefined) {
+      throw new Error(`failed to start: ENOENT: ${name}`)
+    }
+
+    return typeof answer === 'number'
+      ? { exitCode: answer, stdout: '' }
+      : { exitCode: 0, stdout: answer }
+  }
+
+  return { run, tried }
+}
+
+test('takes the first Python that is new enough, by the path it gives', async () => {
+  const system = machine({ '/usr/bin/python3': '3 12 /usr/bin/python3\n' })
+  expect(await findPython(system.run)).toEqual({ path: '/usr/bin/python3' })
+  expect(system.tried).toEqual(['/usr/bin/python3'])
+
+  // Not at /usr/bin: the one on PATH, by its real path and not the shim's name.
+  const shim = machine({ python3: '3 10 /opt/py 3.10/bin/python3.10\n' })
+  expect(await findPython(shim.run)).toEqual({ path: '/opt/py 3.10/bin/python3.10' })
+  expect(shim.tried).toEqual(['/usr/bin/python3', 'python3'])
+
+  const bare = machine({ python: '3 7 \n' })
+  expect(await findPython(bare.run)).toEqual({ path: 'python' })
+})
+
+test('passes over a Python that is too old or is not Python 3', async () => {
+  const mixed = machine({ '/usr/bin/python3': '3 6 /usr/bin/python3\n', python3: '3 13 /usr/local/bin/python3\n' })
+  expect(await findPython(mixed.run)).toEqual({ path: '/usr/local/bin/python3' })
+
+  // Python 2 does not know -I and exits with 2.
+  const two = machine({ python: 2, python3: '3 8 /usr/bin/python3.8\n' })
+  expect(await findPython(two.run, ['python', 'python3'])).toEqual({ path: '/usr/bin/python3.8' })
+})
+
+test('says what is missing when no Python will do', async () => {
+  expect(await findPython(machine({}).run)).toEqual({
+    problem: 'taxi-horse needs Python 3.7 or newer: python3 not found',
+  })
+  expect(await findPython(machine({ python: 2 }).run)).toEqual({
+    problem: 'taxi-horse needs Python 3.7 or newer: python3 not found',
+  })
+  expect(await findPython(machine({ '/usr/bin/python3': '3 6 /usr/bin/python3\n', python3: '3 5 /x\n' }).run)).toEqual({
+    problem: 'taxi-horse needs Python 3.7 or newer: found 3.6',
+  })
+})
+
+test('reads the probe answer and the last line of an error', async () => {
+  expect(parseProbe('3 12 /usr/bin/python3\n')).toEqual({ major: 3, minor: 12, path: '/usr/bin/python3' })
+  expect(parseProbe('3 9 \n')).toEqual({ major: 3, minor: 9, path: '' })
+  expect(parseProbe('')).toBeUndefined()
+  expect(parseProbe('Python 3.12.3')).toBeUndefined()
+  expect(lastLine('Traceback (most recent call last):\n  File "x"\nValueError: bad\n')).toBe('ValueError: bad')
+  expect(lastLine('')).toBe('')
 })

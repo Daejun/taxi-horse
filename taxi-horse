@@ -1,9 +1,10 @@
-#!/usr/bin/python3 -IS
-# Launcher for the taxi_horse status line. meter.py is imported, not run, so
-# that Python reuses its compiled form: this runs once a second per session.
+#!/usr/bin/env python3
 import os
 import sys
 
+# Kept to what an old Python can read, so that it gets as far as this message.
+if sys.version_info < (3, 7):
+    sys.exit("taxi-horse needs Python 3.7 or newer: this is %d.%d" % sys.version_info[:2])
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import meter  # noqa: E402
 

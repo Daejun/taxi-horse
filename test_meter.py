@@ -6,6 +6,7 @@ Fixture transcripts and state files go to /dev/shm.
 import json
 import os
 import shutil
+import sys
 import tempfile
 import unicodedata
 import unittest
@@ -380,8 +381,9 @@ class MeterTest(unittest.TestCase):
         import subprocess
         env = dict(os.environ, XDG_RUNTIME_DIR=self.dir, XDG_STATE_HOME=os.path.join(self.dir, "home-state"))
         launcher = os.path.join(os.path.dirname(os.path.abspath(meter.__file__)), "taxi-horse")
-        return subprocess.run([launcher, *args], input=compact(self.data), env=env,
-                              capture_output=True, text=True)
+        # The way the mod runs it: the interpreter named, not the launcher's shebang.
+        return subprocess.run([sys.executable, "-IS", launcher, *args], input=compact(self.data),
+                              env=env, capture_output=True, text=True)
 
     def test_state_mode_answers_the_mod_with_state_and_level_and_draws_nothing(self):
         now = datetime.now(timezone.utc).timestamp()
