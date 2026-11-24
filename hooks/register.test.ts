@@ -4,6 +4,8 @@ import {
   animal,
   animalColumn,
   animalShown,
+  blinkShows,
+  drawnPhase,
   fare,
   fareAt,
   findPython,
@@ -13,7 +15,7 @@ import {
   poofs,
   render,
   stamped,
-  blinkShows,
+  waits,
 } from './register'
 import type { Fares, Mark, Phase, Run } from './register'
 
@@ -2214,4 +2216,41 @@ test('blinks the wrench and every zzz and leaves their place empty meanwhile', a
   expect(render('vacant', 7, 11, '', 48, false, new Map(), false)).toBe('🪙        🪙        🪙        🪙   🐌')
   expect(render('halt', 7, 11, '', 48, false, new Map(), false)).toBe('🪙        🪙        🪙        🪙   🐘')
   expect(render('vacant', 7, 11, 'home', 48, false, new Map(), false)).toBe('🪙        🪙        🪙        🪙   🏠')
+})
+
+test('draws an hourglass in place of the zzz while the session waits', async () => {
+  // Background work still in flight, or a wakeup scheduled, as the turn ended.
+  expect(waits({})).toBe(false)
+  expect(waits({ background_tasks: [], session_crons: [] })).toBe(false)
+  expect(waits({ background_tasks: [{ id: 'b1', type: 'shell' }] })).toBe(true)
+  expect(waits({ background_tasks: [], session_crons: [{ id: 'c1' }] })).toBe(true)
+  // Only between turns: a running or a standing animal is drawn as it is.
+  expect(drawnPhase('vacant', true)).toBe('wait')
+  expect(drawnPhase('vacant', false)).toBe('vacant')
+  expect(drawnPhase('run', true)).toBe('run')
+  expect(drawnPhase('halt', true)).toBe('halt')
+  for (let dist = 0; dist < 100; dist += 1) {
+    for (const mark of ['', 'home'] as const) {
+      const asleep = render('vacant', 7, dist, mark, 48, false, STAMPS)
+      const waiting = render('wait', 7, dist, mark, 48, false, STAMPS)
+      // Nothing else differs: the snail, the house, the coins and the fares.
+      expect(asleep).toContain('💤')
+      expect(waiting).toBe(asleep.replace('💤', '⏳'))
+      // It blinks as the zzz does.
+      expect(render('wait', 7, dist, mark, 48, false, STAMPS, false)).toBe(
+        render('vacant', 7, dist, mark, 48, false, STAMPS, false),
+      )
+    }
+  }
+  expect(render('wait', 9, 13)).toContain('🐌⏳')
+  expect(render('wait', 9, 13, 'home')).toContain('🏠⏳')
+  expect(animalShown('wait', 9)).toBe('🐌')
+  // Asleep either way: no poof between the two, and one on waking up.
+  expect(poofs({ phase: 'vacant', level: 0, mark: '' }, 'wait', 0)).toBe(false)
+  expect(poofs({ phase: 'wait', level: 0, mark: '' }, 'vacant', 0)).toBe(false)
+  expect(poofs({ phase: 'run', level: 7, mark: '' }, 'wait', 7)).toBe(false)
+  expect(poofs({ phase: 'wait', level: 7, mark: '' }, 'run', 7)).toBe(true)
+  expect(poofs({ phase: 'wait', level: 0, mark: 'home' }, 'halt', 0)).toBe(true)
+  // The meter never says it.
+  expect(parseLive('wait 3')).toBeUndefined()
 })

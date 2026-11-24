@@ -1,6 +1,6 @@
 {
   "name": "taxi-horse",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Draws the taxi_horse line under the prompt: an animal that runs faster and is redrawn more often the faster tokens burn.",
   "author": { "name": "Daejun", "url": "https://github.com/Daejun" },
   "license": "MIT"

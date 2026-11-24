@@ -18,13 +18,18 @@ import type { Register } from 'claude-code'
 // permission-mode line, which no mod can draw above. $.ui.status would pin the
 // line as a notice instead, which the terminal marks with a "!".
 //
-// The picture is meter.py's render(): keep the two the same. One thing is this
-// mod's alone: when the animal changes into another, or wakes up, a poof is
-// drawn in its place for POOF_MS. Falling asleep and going home have none. A status line,
-// redrawn once a second, has no frame that short.
+// The picture is meter.py's render(): keep the two the same. Two things are
+// this mod's alone. When the animal changes into another, or wakes up, a poof
+// is drawn in its place for POOF_MS. Falling asleep and going home have none.
+// A status line, redrawn once a second, has no frame that short.
 //
-// The wrench of a standing animal and every zzz blink: BLINK_MS there,
-// BLINK_MS gone.
+// The other is the hourglass. When a turn ends, the engine says what the
+// session still waits for: background work in flight, and wakeups it has
+// scheduled. While there is any, an hourglass stands in place of the zzz
+// between turns. meter.py reads the transcript alone and draws the zzz.
+//
+// The wrench of a standing animal, the hourglass and every zzz blink:
+// BLINK_MS there, BLINK_MS gone.
 //
 // The fare behind a dollar sign is what the session has cost, in US dollars,
 // since the fare before it. A stretch of less than half a cent leaves paw
@@ -51,6 +56,9 @@ const BEHIND = { gust: '💨', fire: '🔥' } as const
 // What stands right behind an animal that stands while its tools run: it is
 // not asleep, a tool is at work.
 const TOOL = '🔧'
+// What stands in place of the zzz between turns while the session waits for
+// something.
+const WAIT = '⏳'
 // What stands in place of an animal that is at home: no turn is on and the
 // average speed is 0 too.
 const HOUSE = '🏠'
@@ -62,8 +70,8 @@ const POOF_MS = 400
 const MIN_WAIT_MS = 20
 const POLL_MS = 1000
 const IDLE_MS = 1000
-// How long the wrench or a zzz is there, and how long it is gone, as it
-// blinks.
+// How long the wrench, the hourglass or a zzz is there, and how long it is
+// gone, as it blinks.
 const BLINK_MS = 1000
 // How long a sign of life of another copy of this mod counts for.
 const TWIN_FRESH_MS = 2500
@@ -80,7 +88,8 @@ const RETRY_MS = 30000
 // How many answers in a row may be missing before the row says so.
 const FAILURES_SHOWN = 3
 
-export type Phase = 'run' | 'halt' | 'vacant'
+// What the meter says, and "wait": between turns, with something to wait for.
+export type Phase = 'run' | 'halt' | 'vacant' | 'wait'
 export type Mark = '' | keyof typeof BEHIND | 'home'
 
 export function animal(level: number): string {
@@ -97,14 +106,28 @@ export function animalColumn(dist: number, width: number = TRACK): number {
   return pos === lap - 1 ? 0 : width - 2 - pos
 }
 
-// The animal drawn for a state: whatever it was, it sleeps as a snail.
+// The animal drawn for a state: whatever it was, it sleeps as a snail, and
+// waits as one.
 export function animalShown(phase: Phase, level: number): string {
-  return animal(phase === 'vacant' ? 0 : level)
+  return animal(phase === 'vacant' || phase === 'wait' ? 0 : level)
 }
 
-// Asleep: between turns, or at home.
+// Asleep: between turns, or at home. An animal that waits is asleep as well:
+// only what stands behind it differs.
 export function isAsleep(phase: Phase, mark: Mark): boolean {
-  return phase === 'vacant' || mark === 'home'
+  return phase === 'vacant' || phase === 'wait' || mark === 'home'
+}
+
+// Does the session wait for something as a turn ends: background work still
+// in flight, or a wakeup it has scheduled. From what the engine says at Stop.
+export function waits(stop: { background_tasks?: readonly unknown[]; session_crons?: readonly unknown[] }): boolean {
+  return (stop.background_tasks?.length ?? 0) + (stop.session_crons?.length ?? 0) > 0
+}
+
+// The state drawn for what the meter says: between turns, a session with
+// something to wait for waits.
+export function drawnPhase(phase: Phase, isWaiting: boolean): Phase {
+  return phase === 'vacant' && isWaiting ? 'wait' : phase
 }
 
 // Does going from what was drawn to this state take a poof: waking up, and
@@ -216,8 +239,8 @@ export function stamped(
   return { stamps, billed }
 }
 
-// Is what blinks behind the animal, its wrench or its zzz, there at this time,
-// or gone.
+// Is what blinks behind the animal, its wrench, its hourglass or its zzz,
+// there at this time, or gone.
 export function blinkShows(now: number): boolean {
   return Math.floor(now / BLINK_MS) % 2 === 0
 }
@@ -231,8 +254,8 @@ export function blinkShows(now: number): boolean {
 // lap before turns back into coins one coin at a time. That is halfway between
 // two coins: nothing else on the line changes at that moment.
 //
-// hasBlink: false while the wrench or the zzz is gone, as it blinks. Its place
-// stays empty: what it hides does not come back meanwhile.
+// hasBlink: false while the wrench, the hourglass or the zzz is gone, as it
+// blinks. Its place stays empty: what it hides does not come back meanwhile.
 export function render(
   phase: Phase,
   level: number,
@@ -249,9 +272,18 @@ export function render(
   // While the animal changes there is only the poof.
   const standing = mark === 'home' ? HOUSE : animalShown(phase, level)
   const glyphs = new Map<number, string>([[x, isChanging ? POOF : standing]])
-  // Asleep its zzz, standing its wrench, running the wind or fire of its mark.
+  // Asleep its zzz, waiting its hourglass, standing its wrench, running the
+  // wind or fire of its mark.
   const behind =
-    phase === 'vacant' ? '💤' : phase === 'halt' ? TOOL : mark === '' || mark === 'home' ? undefined : BEHIND[mark]
+    phase === 'vacant'
+      ? '💤'
+      : phase === 'wait'
+        ? WAIT
+        : phase === 'halt'
+          ? TOOL
+          : mark === '' || mark === 'home'
+            ? undefined
+            : BEHIND[mark]
   if (behind !== undefined && !isChanging) {
     glyphs.set(x + 2, hasBlink || phase === 'run' ? behind : '  ')
   }
@@ -352,6 +384,17 @@ export const register: Register = on => {
   // What is drawn now: the picture, or why there is none. Undefined until the
   // meter has answered.
   let shown: string | undefined
+  // Whether the session waits for something, as the engine said when the last
+  // turn of the main loop ended. It stands until the next turn ends.
+  let isWaiting = false
+
+  on('classic.Stop', async ($, e, next) => {
+    if (e.agent_id === undefined) {
+      isWaiting = waits(e)
+    }
+
+    return next(e)
+  })
 
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     const hint = await next(e)
@@ -504,25 +547,26 @@ export const register: Register = on => {
           }
           wait = stepAt - now
         }
+        const seen = drawnPhase(phase, isWaiting)
         if (isDrawing) {
-          if (poofs(drawn, phase, level, mark)) {
+          if (poofs(drawn, seen, level, mark)) {
             poofUntil = now + POOF_MS
           }
-          drawn = { phase, level, mark }
+          drawn = { phase: seen, level, mark }
         }
         // Falling asleep cuts a poof short.
-        const isChanging = isDrawing && !isAsleep(phase, mark) && now < poofUntil
+        const isChanging = isDrawing && !isAsleep(seen, mark) && now < poofUntil
         if (isChanging) {
           wait = Math.min(wait, poofUntil - now)
         }
-        // The wrench and a zzz are redrawn as they come and go.
+        // The wrench, the hourglass and a zzz are redrawn as they come and go.
         const hasBlink = blinkShows(now)
-        if (isDrawing && phase !== 'run') {
+        if (isDrawing && seen !== 'run') {
           wait = Math.min(wait, BLINK_MS - (now % BLINK_MS))
         }
         wait = Math.max(MIN_WAIT_MS, wait)
         const line = isDrawing
-          ? render(phase, level, dist, mark, TRACK, isChanging, fares.stamps, hasBlink)
+          ? render(seen, level, dist, mark, TRACK, isChanging, fares.stamps, hasBlink)
           : problem
         if (line !== shown) {
           shown = line

@@ -19,6 +19,10 @@ running under the input box.
   no turn is on, it goes into its house to sleep (`🏠💤`). A session that
   has not started yet is at home as well. While tools run it stays out
   with its wrench, however long they take.
+- When a turn has ended and the session still waits for something, an
+  hourglass stands in place of the zzz (`🐌⏳`, at home `🏠⏳`). That is
+  background work that is still running, or a wakeup the session has
+  scheduled. The hourglass blinks as the zzz does.
 - It eats the coins on its way. After the last coin it starts again from
   the right. What it left on the lap before turns back into coins one at a
   time, each when the animal is a coin and a half away from it: never at
@@ -215,7 +219,8 @@ command:
 
 The status line is the row right under the input box, above the
 permission-mode line, and Claude Code redraws it once a second at most: the
-animal moves one column a second whatever its speed.
+animal moves one column a second whatever its speed. The poof and the
+hourglass are the mod's: the script draws neither.
 
 Use one or the other. With both, the mod draws and the script prints
 nothing, but Claude Code keeps the status line's row, so an empty row stays
