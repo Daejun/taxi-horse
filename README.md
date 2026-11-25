@@ -69,7 +69,8 @@ or, typed at the prompt of a Claude Code session:
 
 Nothing has to be checked or installed first. The plugin needs Python 3.7
 or newer and looks for it by itself when a session starts: `/usr/bin/python3`,
-then `python3`, `python` and `py` on `PATH`. When there is none, the row says so
+then `python3`, `python` and `py` on `PATH`. On Windows it looks for `py`
+first, then `python` and `python3`. When there is none, the row says so
 in place of the picture:
 
 ```
@@ -83,7 +84,8 @@ is there.
 The steps below are the same install, written so that a coding agent can
 follow them. Run them in order. Each step says what to expect.
 
-Tested with Claude Code 2.1.331 and git 2.43 on Linux, and with Python 3.7,
+Tested with Claude Code 2.1.332 and 2.1.292, the oldest build it is known
+to work with, and git 2.43 on Linux, and with Python 3.7,
 3.8, 3.9, 3.10, 3.12, 3.13 and 3.14. On Windows the steps are in PowerShell:
 see "On Windows" below.
 
@@ -319,7 +321,9 @@ claude plugin validate .          # the marketplace, the manifest, the mod's typ
 - A line of text in place of the picture: the plugin cannot run its script,
   and the text is the reason. `taxi-horse needs Python 3.7 or newer: ...`
   means no Python was found, or only an older one. Any other text is the
-  last line of the script's error: run the step 3 check to see all of it.
+  last line of the script's error, or the first line of an error from
+  Claude Code, such as a call this build of Claude Code lacks. For the
+  script's error, run the step 3 check to see all of it.
 - No line in any session: run the step 3 check. Anything but
   `vacant 0 home` and exit 0 is the script failing; its traceback is on
   stderr.

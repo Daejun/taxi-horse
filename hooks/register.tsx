@@ -7,6 +7,10 @@ import type { Register } from 'claude-code'
 // meter.py counts the tokens. Once a second this mod runs "taxi-horse --state"
 // with the session id and the transcript path, and gets back "<state> <level>"
 // and, when the animal has a mark, "gust", "fire" or "home".
+// The session names its transcript. A build older than $.session.info() does
+// not: there the path is the one the last classic hook event of the main loop
+// carried for this session, and before the first one the meter answers from
+// what it has kept.
 // It finds the Python to run it with by itself, and when there is none the row
 // says so: a plugin has nothing that runs when it is installed, so this is
 // where a missing prerequisite shows.
@@ -87,6 +91,9 @@ const TWIN_FRESH_MS = 2500
 // and there python3 and python may be the Store's stand-ins, which answer
 // with exit status 9009.
 const PYTHONS: readonly string[] = ['/usr/bin/python3', 'python3', 'python', 'py']
+// The same on Windows: the launcher first, and the names a stand-in may have
+// last.
+const PYTHONS_WINDOWS: readonly string[] = ['py', 'python', 'python3']
 // The oldest Python 3 the meter's tests pass with: 3.7. With 3.6 it counts
 // nothing.
 const PYTHON_MIN = 7
@@ -402,12 +409,53 @@ export async function findPython(
 // that the mod cannot read.
 export function signDir(
   runtime: string | undefined,
-  platform: string | undefined,
+  isWindows: boolean,
   temp: string | undefined,
 ): string | undefined {
-  const base = runtime ?? (platform === 'windows' ? temp : undefined)
+  const base = runtime ?? (isWindows ? temp : undefined)
 
   return base === undefined ? undefined : `${base}/taxi-horse`
+}
+
+// Does the engine run on Windows: as the session says, or, on a build too old
+// to say, as Windows itself sets OS.
+export function isWindows(platform: string | undefined, os: string | undefined): boolean {
+  return platform === 'windows' || os === 'Windows_NT'
+}
+
+// Where to look for Python, in the order tried.
+export function pythonsFor(isWindows: boolean): readonly string[] {
+  return isWindows ? PYTHONS_WINDOWS : PYTHONS
+}
+
+// A session's transcript, as a classic hook event named it.
+export type Seen = { session: string; transcript: string }
+
+// What a classic hook event says of its session's transcript: nothing when it
+// comes from a subagent, whose transcript is not the session's.
+export function seenIn(e: { session_id?: string; transcript_path?: string; agent_id?: string }): Seen | undefined {
+  if (e.agent_id !== undefined || !e.session_id || !e.transcript_path) {
+    return undefined
+  }
+
+  return { session: e.session_id, transcript: e.transcript_path }
+}
+
+// The transcript to hand the meter: the one the session names, or, where the
+// build cannot name it, the one a classic event named for this same session.
+// A path seen for another session, before a /clear or a resume, is not this
+// one's.
+export function transcriptFor(session: string, named: string | undefined, seen: Seen | undefined): string | undefined {
+  if (named !== undefined) {
+    return named
+  }
+
+  return seen?.session === session ? seen.transcript : undefined
+}
+
+// What the row says when the meter could not be asked: the error's first line.
+export function errorLine(error: unknown): string {
+  return String(error).trim().split('\n')[0]?.trim() ?? ''
 }
 
 // The last line of what a failed meter wrote: the error, under its traceback.
@@ -422,8 +470,28 @@ export const register: Register = on => {
   // What the session keeps as "waiting", as this copy last wrote or read it.
   // It stands until the next turn ends.
   let isWaiting = false
+  // The transcript the last classic event of the main loop named.
+  let seen: Seen | undefined
+  const see = (e: Parameters<typeof seenIn>[0]): void => {
+    seen = seenIn(e) ?? seen
+  }
+
+  // Named one by one, not as classic.*: that would bring every tool call's
+  // PreToolUse and PostToolUse here too.
+  on('classic.SessionStart', async ($, e, next) => {
+    see(e)
+
+    return next(e)
+  })
+
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    see(e)
+
+    return next(e)
+  })
 
   on('classic.Stop', async ($, e, next) => {
+    see(e)
     if (e.agent_id === undefined) {
       isWaiting = waits(e)
       try {
@@ -468,9 +536,11 @@ export const register: Register = on => {
     try {
       platform = (await $.session.info()).platform
     } catch {
-      // not known: no sign of life on Windows
+      // A build without $.session.info(): OS says it.
     }
-    const signs = signDir(await $.env.get('XDG_RUNTIME_DIR'), platform, await $.env.get('TEMP'))
+    const windows = isWindows(platform, await $.env.get('OS'))
+    const pythons = pythonsFor(windows)
+    const signs = signDir(await $.env.get('XDG_RUNTIME_DIR'), windows, await $.env.get('TEMP'))
     const self = Math.floor(Math.random() * 1e9)
     let phase: Phase = 'vacant'
     let level = 0
@@ -537,7 +607,7 @@ export const register: Register = on => {
             return
           }
           probedAt = now
-          const found = await findPython(argv => $.process.run([...argv], { timeoutMs: 5000 }))
+          const found = await findPython(argv => $.process.run([...argv], { timeoutMs: 5000 }), pythons)
           if ('problem' in found) {
             isDrawing = false
             problem = found.problem
@@ -546,11 +616,16 @@ export const register: Register = on => {
           }
           python = found.path
         }
-        const { transcriptPath } = await $.session.info()
+        let named: string | undefined
+        try {
+          named = (await $.session.info()).transcriptPath
+        } catch {
+          // A build without $.session.info(): the classic events name it.
+        }
         // The launcher is run by the Python found, not through its first line:
         // that one takes whatever python3 is first on PATH.
         const { exitCode, stdout, stderr } = await $.process.run([python, '-IS', meter, '--state'], {
-          stdin: JSON.stringify({ session_id: session, transcript_path: transcriptPath }),
+          stdin: JSON.stringify({ session_id: session, transcript_path: transcriptFor(session, named, seen) }),
           timeoutMs: 5000,
         })
         const live = exitCode === 0 ? parseLive(stdout) : undefined
@@ -574,14 +649,16 @@ export const register: Register = on => {
         }
         usd = await costSoFar()
         isDrawing = true
-      } catch {
-        // The meter did not start or did not finish. After a few times in a
-        // row, look for Python again: it may have moved.
+      } catch (error) {
+        // The meter did not start or did not finish, or the engine lacks a
+        // call made here. After a few times in a row the row says why, and
+        // the mod looks for Python again: it may have moved.
         isDrawing = false
         failures += 1
         if (failures >= FAILURES_SHOWN) {
           failures = 0
           python = undefined
+          problem = `taxi-horse: ${errorLine(error)}`
         }
       }
     }

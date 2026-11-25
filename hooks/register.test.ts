@@ -6,17 +6,22 @@ import {
   animalShown,
   blinkShows,
   drawnPhase,
+  errorLine,
   fare,
   fareAt,
   findPython,
   homeFares,
+  isWindows,
   lastLine,
   parseLive,
   parseProbe,
   poofs,
+  pythonsFor,
   render,
+  seenIn,
   signDir,
   stamped,
+  transcriptFor,
   waits,
 } from './register'
 import type { Fares, Mark, Phase, Run } from './register'
@@ -1556,17 +1561,73 @@ test('finds Python on Windows through the launcher py', async () => {
     path: 'C:\\Users\\me\\AppData\\Local\\Programs\\Python\\Python312\\python.exe',
   })
   expect(windows.tried).toEqual(['/usr/bin/python3', 'python3', 'python', 'py'])
+
+  // Known to be Windows, the launcher is tried first: the stand-ins are not
+  // asked at all.
+  const known = machine({
+    python3: 9009,
+    python: 9009,
+    py: '3 12 C:\\Python312\\python.exe\r\n',
+  })
+  expect(await findPython(known.run, pythonsFor(true))).toEqual({ path: 'C:\\Python312\\python.exe' })
+  expect(known.tried).toEqual(['py'])
+  // Without the launcher, a real python or python3 still does.
+  const plain = machine({ python3: '3 11 C:\\Python311\\python3.exe\r\n' })
+  expect(await findPython(plain.run, pythonsFor(true))).toEqual({ path: 'C:\\Python311\\python3.exe' })
+  expect(plain.tried).toEqual(['py', 'python', 'python3'])
+})
+
+test('looks for Python in the order of the system it runs on', () => {
+  expect(pythonsFor(false)).toEqual(['/usr/bin/python3', 'python3', 'python', 'py'])
+  expect(pythonsFor(true)).toEqual(['py', 'python', 'python3'])
+})
+
+test('knows Windows from the session, or from OS on a build that cannot say', () => {
+  expect(isWindows('windows', undefined)).toBe(true)
+  expect(isWindows(undefined, 'Windows_NT')).toBe(true)
+  expect(isWindows('windows', 'Windows_NT')).toBe(true)
+  expect(isWindows(undefined, undefined)).toBe(false)
+  expect(isWindows('linux', undefined)).toBe(false)
+  // WSL runs Linux: it has no OS of Windows.
+  expect(isWindows('wsl', undefined)).toBe(false)
 })
 
 test('puts the sign of life where meter.py looks for it', () => {
-  expect(signDir('/run/user/1000', 'linux', undefined)).toBe('/run/user/1000/taxi-horse')
-  expect(signDir(undefined, 'windows', 'C:\\Users\\me\\AppData\\Local\\Temp')).toBe(
+  expect(signDir('/run/user/1000', false, undefined)).toBe('/run/user/1000/taxi-horse')
+  expect(signDir(undefined, true, 'C:\\Users\\me\\AppData\\Local\\Temp')).toBe(
     'C:\\Users\\me\\AppData\\Local\\Temp/taxi-horse',
   )
-  expect(signDir('/x', 'windows', 'C:\\Temp')).toBe('/x/taxi-horse')
+  expect(signDir('/x', true, 'C:\\Temp')).toBe('/x/taxi-horse')
   // The meter's folder there is named by a uid: no sign.
-  expect(signDir(undefined, 'linux', '/tmp')).toBeUndefined()
-  expect(signDir(undefined, undefined, 'C:\\Temp')).toBeUndefined()
+  expect(signDir(undefined, false, '/tmp')).toBeUndefined()
+})
+
+test('hands the meter the transcript of this session, from the session or a classic event', () => {
+  const main = { session_id: 's1', transcript_path: '/p/s1.jsonl' }
+  expect(seenIn(main)).toEqual({ session: 's1', transcript: '/p/s1.jsonl' })
+  // A subagent's event names its own transcript, not the session's.
+  expect(seenIn({ ...main, agent_id: 'a1', transcript_path: '/p/s1/subagents/agent-a1.jsonl' })).toBeUndefined()
+  expect(seenIn({ session_id: 's1', transcript_path: '' })).toBeUndefined()
+  expect(seenIn({ transcript_path: '/p/s1.jsonl' })).toBeUndefined()
+
+  const seen = seenIn(main)
+  // What the session names comes first.
+  expect(transcriptFor('s1', '/q/s1.jsonl', seen)).toBe('/q/s1.jsonl')
+  // A build without $.session.info(): the path the event named.
+  expect(transcriptFor('s1', undefined, seen)).toBe('/p/s1.jsonl')
+  // After a /clear or a resume, until an event names the new one: none.
+  expect(transcriptFor('s2', undefined, seen)).toBeUndefined()
+  // Before the first event: none.
+  expect(transcriptFor('s1', undefined, undefined)).toBeUndefined()
+})
+
+test('says on the row what went wrong, on one line', () => {
+  const missing = new TypeError("$.session.info is not a function. (In '$.session.info()', '$.session.info' is undefined)")
+  expect(errorLine(missing)).toBe(
+    "TypeError: $.session.info is not a function. (In '$.session.info()', '$.session.info' is undefined)",
+  )
+  expect(errorLine(new Error('first\nsecond'))).toBe('Error: first')
+  expect(errorLine('timed out')).toBe('timed out')
 })
 
 test('says what is missing when no Python will do', async () => {
