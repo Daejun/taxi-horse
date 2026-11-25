@@ -80,7 +80,7 @@ stands among them. Each animal is therefore seen about as often as any other.
 The status line input only carries the last response's token counts, so the
 rate comes from the session transcript and its subagent transcripts. Each run
 reads only what was appended since the previous run and keeps its progress in
-a small state file under $XDG_RUNTIME_DIR.
+a small state file under $XDG_RUNTIME_DIR, on Windows under %TEMP%.
 
 Claude Code writes a response to the transcript when the response is complete,
 not while it streams (on 2.1.330: about 0.2 s after its last content block,
@@ -162,6 +162,11 @@ def state_dir():
     base = os.environ.get("XDG_RUNTIME_DIR")
     if base and os.path.isdir(base):
         return os.path.join(base, "taxi-horse")
+    if os.name == "nt":
+        # Windows has no tmpfs and no uid: the user's own temporary folder,
+        # where the mod puts its sign of life too.
+        import tempfile
+        return os.path.join(os.environ.get("TEMP") or tempfile.gettempdir(), "taxi-horse")
     base = "/dev/shm" if os.path.isdir("/dev/shm") else "/tmp"
     return os.path.join(base, "taxi-horse-%d" % os.getuid())
 
@@ -861,7 +866,7 @@ def main():
     if "--levels" in sys.argv:
         show_levels()
         return
-    data = json.load(sys.stdin)
+    data = read_input()
     now = time.time()
     directory = state_dir()
     session = os.path.basename(str(data.get("session_id") or "unknown"))
@@ -872,7 +877,16 @@ def main():
         print(render(ph, lvl, dist, catching_up, mark=mk, stamps=stamps, blink=blink_shows(now)))
 
 
+def read_input():
+    """The JSON on stdin. Claude Code and the mod write it in UTF-8, and on
+    Windows a pipe is read in the ANSI code page: read the bytes."""
+    return json.loads(sys.stdin.buffer.read())
+
+
 def cli():
+    # The same for what it writes: the ANSI code page has no emoji.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     try:
         main()
     except Exception as e:  # a blank status line would hide the failure

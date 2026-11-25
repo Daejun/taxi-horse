@@ -69,7 +69,7 @@ or, typed at the prompt of a Claude Code session:
 
 Nothing has to be checked or installed first. The plugin needs Python 3.7
 or newer and looks for it by itself when a session starts: `/usr/bin/python3`,
-then `python3` and `python` on `PATH`. When there is none, the row says so
+then `python3`, `python` and `py` on `PATH`. When there is none, the row says so
 in place of the picture:
 
 ```
@@ -84,7 +84,8 @@ The steps below are the same install, written so that a coding agent can
 follow them. Run them in order. Each step says what to expect.
 
 Tested with Claude Code 2.1.331 and git 2.43 on Linux, and with Python 3.7,
-3.8, 3.9, 3.10, 3.12, 3.13 and 3.14.
+3.8, 3.9, 3.10, 3.12, 3.13 and 3.14. On Windows the steps are in PowerShell:
+see "On Windows" below.
 
 ### 0. Before you start
 
@@ -168,6 +169,40 @@ through that session's transcript.
 On screen the line is the row under the permission-mode line (`⏵⏵ ...`), or
 right under the input box when that line is not shown.
 
+### On Windows
+
+Step 1's install command is the same in PowerShell. The other steps run the
+script with Python by name: Windows does not read its first line. Where
+`python` opens the Microsoft Store or says that Python was not found, use
+`py` in its place.
+
+```powershell
+$TAXI = Get-ChildItem "$HOME\.claude\plugins\cache\taxi-horse\taxi-horse\*\taxi-horse" |
+  Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
+python $TAXI --demo               # step 1: 26 lines of coins and animals
+python $TAXI --learn              # step 2
+```
+
+Step 3:
+
+```powershell
+$D = Join-Path ([IO.Path]::GetTempPath()) "taxi-horse-check"
+New-Item -ItemType Directory -Force $D | Out-Null
+$env:XDG_RUNTIME_DIR = $D; $env:XDG_STATE_HOME = $D
+'{"session_id":"install-check"}' | python $TAXI --state
+"exit $LASTEXITCODE"
+Remove-Item Env:XDG_RUNTIME_DIR, Env:XDG_STATE_HOME
+Remove-Item -Recurse $D
+```
+
+It prints `vacant 0 home`, then `exit 0`. Windows has no
+`$XDG_RUNTIME_DIR` of its own, so a session keeps its files in
+`%TEMP%\taxi-horse`:
+
+```powershell
+Get-ChildItem "$env:TEMP\taxi-horse"
+```
+
 ## Update
 
 ```sh
@@ -179,6 +214,18 @@ The first fetches this repository again. The second installs the plugin
 again if `version` in `.claude-plugin/plugin.json` is higher than the
 installed one: a commit that leaves `version` alone does not reach an
 installed copy. `claude plugin list` then shows the new version.
+
+From the prompt of a session, the same two steps are one:
+
+1. Type `/plugin`, press Tab to the **Marketplaces** tab, select
+   `taxi-horse` and choose **Update marketplace**. It fetches this
+   repository again and updates the plugin installed from it.
+2. Close the panel. Claude Code then runs `/reload-plugins` by itself. If
+   it warns that the reload would cost the prompt cache and leaves the
+   update pending, type `/reload-plugins --force`.
+
+Other sessions that are already open keep the old version until
+`/reload-plugins` or a restart.
 
 ## Install from a clone
 
@@ -204,8 +251,8 @@ claude plugin marketplace remove taxi-horse
 ```
 
 Both commands edit `~/.claude/settings.json`. The state is in
-`$XDG_RUNTIME_DIR/taxi-horse/` and `~/.local/state/taxi-horse/`; both can be
-deleted.
+`$XDG_RUNTIME_DIR/taxi-horse/` (on Windows `%TEMP%\taxi-horse\`) and
+`~/.local/state/taxi-horse/`; both can be deleted.
 
 ## The other way to run it
 
@@ -235,7 +282,7 @@ under the input box.
 | --- | --- |
 | the session's transcript, and `subagents/` beside it | read: token counts of each response |
 | the session's cost: asked of the session by the mod, `cost.total_cost_usd` of the input as the `statusLine` command | read: the fare |
-| `$XDG_RUNTIME_DIR/taxi-horse/<session id>.*` | written: the meter's progress, where the animal is and the fares of its lap, the mod's sign of life. On tmpfs. |
+| `$XDG_RUNTIME_DIR/taxi-horse/<session id>.*`, on Windows `%TEMP%\taxi-horse\<session id>.*` | written: the meter's progress, where the animal is and the fares of its lap, the mod's sign of life. On tmpfs, except on Windows. |
 | `$XDG_STATE_HOME/taxi-horse/rates.json` (default `~/.local/state`) | written at most once a minute by a busy session: the speed history |
 | `~/.claude/projects/*/*.jsonl` | read by `--learn` only |
 

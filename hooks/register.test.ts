@@ -15,6 +15,7 @@ import {
   parseProbe,
   poofs,
   render,
+  signDir,
   stamped,
   waits,
 } from './register'
@@ -1542,6 +1543,30 @@ test('passes over a Python that is too old or is not Python 3', async () => {
   // Python 2 does not know -I and exits with 2.
   const two = machine({ python: 2, python3: '3 8 /usr/bin/python3.8\n' })
   expect(await findPython(two.run, ['python', 'python3'])).toEqual({ path: '/usr/bin/python3.8' })
+})
+
+test('finds Python on Windows through the launcher py', async () => {
+  // python3 and python are the Store's stand-ins: they answer 9009, not the probe.
+  const windows = machine({
+    python3: 9009,
+    python: 9009,
+    py: '3 12 C:\\Users\\me\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\r\n',
+  })
+  expect(await findPython(windows.run)).toEqual({
+    path: 'C:\\Users\\me\\AppData\\Local\\Programs\\Python\\Python312\\python.exe',
+  })
+  expect(windows.tried).toEqual(['/usr/bin/python3', 'python3', 'python', 'py'])
+})
+
+test('puts the sign of life where meter.py looks for it', () => {
+  expect(signDir('/run/user/1000', 'linux', undefined)).toBe('/run/user/1000/taxi-horse')
+  expect(signDir(undefined, 'windows', 'C:\\Users\\me\\AppData\\Local\\Temp')).toBe(
+    'C:\\Users\\me\\AppData\\Local\\Temp/taxi-horse',
+  )
+  expect(signDir('/x', 'windows', 'C:\\Temp')).toBe('/x/taxi-horse')
+  // The meter's folder there is named by a uid: no sign.
+  expect(signDir(undefined, 'linux', '/tmp')).toBeUndefined()
+  expect(signDir(undefined, undefined, 'C:\\Temp')).toBeUndefined()
 })
 
 test('says what is missing when no Python will do', async () => {

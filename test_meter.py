@@ -382,13 +382,43 @@ class MeterTest(unittest.TestCase):
         self.assertFalse(meter.mod_draws(self.state, "sess", T0 + meter.MOD_FRESH + 1))
         self.assertFalse(meter.mod_draws(self.state, "other", T0 + 1))
 
-    def run_cli(self, *args):
+    def run_cli(self, *args, env=None, flags=()):
         import subprocess
-        env = dict(os.environ, XDG_RUNTIME_DIR=self.dir, XDG_STATE_HOME=os.path.join(self.dir, "home-state"))
+        env = dict(os.environ, XDG_RUNTIME_DIR=self.dir, XDG_STATE_HOME=os.path.join(self.dir, "home-state"),
+                   **(env or {}))
         launcher = os.path.join(os.path.dirname(os.path.abspath(meter.__file__)), "taxi-horse")
         # The way the mod runs it: the interpreter named, not the launcher's shebang.
-        return subprocess.run([sys.executable, "-IS", launcher, *args], input=compact(self.data),
-                              env=env, capture_output=True, text=True)
+        return subprocess.run([sys.executable, *flags, "-IS", launcher, *args], input=compact(self.data),
+                              env=env, capture_output=True, encoding="utf-8")
+
+    def test_draws_in_utf8_on_a_pipe_whose_encoding_is_not(self):
+        # On Windows a pipe has the ANSI code page, which has no emoji. Here
+        # the C locale without UTF-8 mode gives a pipe in ASCII.
+        out = self.run_cli(env={"LC_ALL": "C"}, flags=("-X", "utf8=0"))
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn(meter.COIN, out.stdout)
+
+    def test_reads_its_input_as_utf8_whatever_the_locale(self):
+        # Claude Code writes the JSON in UTF-8, non-ASCII as it is, and on
+        # Windows a pipe is read in the ANSI code page.
+        import io
+        from unittest import mock
+        path = "C:\\Users\\대준\\.claude\\projects\\C--x\\s.jsonl"
+        raw = json.dumps({"session_id": "s", "transcript_path": path}, ensure_ascii=False).encode("utf-8")
+        for encoding in ("cp949", "cp1252"):
+            stdin = io.TextIOWrapper(io.BytesIO(raw), encoding=encoding, errors="replace")
+            with mock.patch.object(sys, "stdin", stdin):
+                self.assertEqual(meter.read_input()["transcript_path"], path, encoding)
+
+    def test_state_dir_on_windows_is_in_the_users_temp_folder(self):
+        # Windows has no XDG_RUNTIME_DIR, no /dev/shm and no os.getuid. The mod
+        # puts its sign of life in the same folder.
+        from unittest import mock
+        env = {k: v for k, v in os.environ.items() if k != "XDG_RUNTIME_DIR"}
+        env["TEMP"] = self.dir
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(meter.os, "name", "nt"), \
+                mock.patch.object(meter.os, "getuid", side_effect=AttributeError("getuid"), create=True):
+            self.assertEqual(meter.state_dir(), os.path.join(self.dir, "taxi-horse"))
 
     def test_state_mode_answers_the_mod_with_state_and_level_and_draws_nothing(self):
         now = datetime.now(timezone.utc).timestamp()

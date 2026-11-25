@@ -82,8 +82,11 @@ const BLINK_MS = 1000
 // How long a sign of life of another copy of this mod counts for.
 const TWIN_FRESH_MS = 2500
 // Where Python may be, in the order tried. The system's comes first: it has no
-// version manager's shim in front of it.
-const PYTHONS: readonly string[] = ['/usr/bin/python3', 'python3', 'python']
+// version manager's shim in front of it. py is the launcher of Windows: the
+// installer from python.org puts it on PATH and leaves python off by default,
+// and there python3 and python may be the Store's stand-ins, which answer
+// with exit status 9009.
+const PYTHONS: readonly string[] = ['/usr/bin/python3', 'python3', 'python', 'py']
 // The oldest Python 3 the meter's tests pass with: 3.7. With 3.6 it counts
 // nothing.
 const PYTHON_MIN = 7
@@ -393,6 +396,20 @@ export async function findPython(
   return { problem: `taxi-horse needs Python 3.${PYTHON_MIN} or newer: ${found}` }
 }
 
+// The folder of the sign of life, as meter.py's state_dir() has it:
+// $XDG_RUNTIME_DIR/taxi-horse, or on Windows %TEMP%/taxi-horse. Elsewhere,
+// without $XDG_RUNTIME_DIR, there is none: the meter names its folder by a uid
+// that the mod cannot read.
+export function signDir(
+  runtime: string | undefined,
+  platform: string | undefined,
+  temp: string | undefined,
+): string | undefined {
+  const base = runtime ?? (platform === 'windows' ? temp : undefined)
+
+  return base === undefined ? undefined : `${base}/taxi-horse`
+}
+
 // The last line of what a failed meter wrote: the error, under its traceback.
 export function lastLine(text: string): string {
   return text.trim().split('\n').pop()?.trim() ?? ''
@@ -447,7 +464,13 @@ export const register: Register = on => {
       // nothing kept
     }
     const meter = `${$.plugin.root}/taxi-horse`
-    const runtime = await $.env.get('XDG_RUNTIME_DIR')
+    let platform: string | undefined
+    try {
+      platform = (await $.session.info()).platform
+    } catch {
+      // not known: no sign of life on Windows
+    }
+    const signs = signDir(await $.env.get('XDG_RUNTIME_DIR'), platform, await $.env.get('TEMP'))
     const self = Math.floor(Math.random() * 1e9)
     let phase: Phase = 'vacant'
     let level = 0
@@ -503,7 +526,7 @@ export const register: Register = on => {
       polledAt = now
       try {
         const session = await $.session.id()
-        if (runtime !== undefined && (await standsBack(`${runtime}/taxi-horse/${session}.mod`, now))) {
+        if (signs !== undefined && (await standsBack(`${signs}/${session}.mod`, now))) {
           isDrawing = false
           problem = undefined
 
