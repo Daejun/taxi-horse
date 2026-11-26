@@ -3,8 +3,8 @@
 This is the counting half. There are two ways to run it.
 
 With the mod (the plugin this file ships in): the mod runs
-"taxi-horse --state" once a second, with the session id and the transcript
-path as JSON on stdin, gets back "<state> <level>", with a third word when
+"taxi-horse --state" once a second, every 3 seconds in a window without the
+focus, with the session id and the transcript path as JSON on stdin, gets back "<state> <level>", with a third word when
 the animal has a mark ("gust", "fire" or "home"), and draws the
 line itself, on a row of its own under the input box. It redraws as often as the animal
 moves a column, so the animal never jumps.
@@ -105,12 +105,15 @@ TAXI_HORSE_DEBUG=<file> appends one line per run: time, state, rate, what
 goes behind the animal, and the last thing seen in each transcript.
 """
 
-import collections
-import json
 import math
 import os
 import sys
 import time
+
+try:
+    from _json import make_scanner
+except ImportError:              # a Python without the C part of json
+    make_scanner = None
 
 WINDOW = 120.0           # seconds the rate is averaged over
 ACTIVE_MAX = 300.0       # a request seen longer ago than this no longer counts as running
@@ -171,6 +174,56 @@ def write_whole(path, text):
     with open(tmp, "w") as f:
         f.write(text)
     os.replace(tmp, path)
+
+
+# ---------------------------------------------------------------- JSON
+#
+# The meter runs once a second in every session, and `import json` costs
+# about as much as all the rest of a run: 5 ms of CPU of 12 on Python 3.12,
+# most of it for `re`. So JSON is read with json's own C scanner, which needs
+# neither, and json is imported only to write, which a run between turns
+# does not do.
+
+class JsonContext:
+    """What json's C scanner reads off its context, as json.JSONDecoder sets it."""
+
+    def __init__(self):
+        self.strict = True
+        self.object_hook = None
+        self.object_pairs_hook = None
+        self.parse_float = float
+        self.parse_int = int
+        self.parse_constant = {"-Infinity": -math.inf, "Infinity": math.inf, "NaN": math.nan}.__getitem__
+        self.memo = {}
+
+
+scan_once = make_scanner(JsonContext()) if make_scanner else None
+JSON_SPACE = " \t\n\r"
+
+
+def loads(text):
+    """json.loads() of text, a str or UTF-8 bytes. Raises ValueError where it does."""
+    if scan_once is None:
+        import json
+        return json.loads(text)
+    if isinstance(text, bytes):
+        if text.startswith(b"\xef\xbb\xbf"):
+            text = text[3:]
+        text = text.decode("utf-8", "surrogatepass")
+    start = len(text) - len(text.lstrip(JSON_SPACE))
+    try:
+        value, end = scan_once(text, start)
+    except StopIteration:
+        raise ValueError("Expecting value: char %d" % start)
+    if text[end:].strip(JSON_SPACE):
+        raise ValueError("Extra data: char %d" % end)
+    return value
+
+
+def dumps(value):
+    """value as compact JSON text."""
+    import json
+    return json.dumps(value, separators=(",", ":"))
 
 
 # ---------------------------------------------------------------- transcript
@@ -309,7 +362,7 @@ def scan(st, transcript, now, history, deadline):
                 changed = True
                 if b'"type":"assistant"' in line or b'"type":"user"' in line:
                     try:
-                        d = json.loads(line)
+                        d = loads(line)
                     except ValueError:
                         continue
                     if isinstance(d, dict):
@@ -330,7 +383,7 @@ def new_state():
 def load_state(path):
     try:
         with open(path) as f:
-            st = json.load(f)
+            st = loads(f.read())
         if st.get("v") == STATE_VERSION:
             return st
     except (OSError, ValueError):
@@ -339,7 +392,7 @@ def load_state(path):
 
 
 def save_state(path, st):
-    write_whole(path, json.dumps(st, separators=(",", ":")))
+    write_whole(path, dumps(st))
 
 
 def drop_old_states(directory, now):
@@ -425,7 +478,7 @@ def load_rates(path):
     """The history: how many samples of the rate fell in each bucket."""
     try:
         with open(path) as f:
-            d = json.load(f)
+            d = loads(f.read())
         if d.get("v") == 1 and len(d["h"]) == HIST_SIZE:
             return [float(x) for x in d["h"]]
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
@@ -438,7 +491,7 @@ def save_rates(path, hist):
     if total > HIST_CAP:                 # the oldest samples fade
         hist = [x * HIST_CAP / total for x in hist]
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    write_whole(path, json.dumps({"v": 1, "h": [round(x, 3) for x in hist]}, separators=(",", ":")))
+    write_whole(path, dumps({"v": 1, "h": [round(x, 3) for x in hist]}))
 
 
 def merge_rates(path, pending):
@@ -835,13 +888,28 @@ def render(ph, lvl, dist, catching_up=False, width=None, mark="", stamps=None, b
 
 # ---------------------------------------------------------------- entry points
 
-# What measure() reads for a session. phase: RUN, HALT or VACANT; rate: tok/s;
-# counted: tokens counted in all; catching_up: still reading a long transcript
-# for the first time; dist: how far the animal has run, in columns; level: the
-# speed level; mark: GUST, FIRE, HOME or ""; stamps: what the animal has left
-# (see stamped()).
-Reading = collections.namedtuple(
-    "Reading", "phase rate counted catching_up dist level mark stamps")
+class Reading(tuple):
+    """What measure() reads for a session, a tuple with its fields by name.
+
+    phase: RUN, HALT or VACANT; rate: tok/s; counted: tokens counted in all;
+    catching_up: still reading a long transcript for the first time; dist: how
+    far the animal has run, in columns; level: the speed level; mark: GUST,
+    FIRE, HOME or ""; stamps: what the animal has left (see stamped()).
+
+    Not a collections.namedtuple: importing collections costs a run between
+    turns about three times the CPU of all of measure().
+    """
+    __slots__ = ()
+    FIELDS = ("phase", "rate", "counted", "catching_up", "dist", "level", "mark", "stamps")
+
+    def __new__(cls, *values):
+        assert len(values) == len(cls.FIELDS)
+        return tuple.__new__(cls, values)
+
+
+for _i, _name in enumerate(Reading.FIELDS):
+    setattr(Reading, _name, property(lambda r, i=_i: r[i]))
+del _i, _name
 
 
 def session_of(data):
@@ -934,7 +1002,7 @@ def show_levels():
 def read_input():
     """The JSON on stdin. Claude Code and the mod write it in UTF-8, and on
     Windows a pipe is read in the ANSI code page: read the bytes."""
-    return json.loads(sys.stdin.buffer.read())
+    return loads(sys.stdin.buffer.read())
 
 
 def main():

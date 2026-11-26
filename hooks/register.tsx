@@ -4,9 +4,10 @@ import type { Register } from 'claude-code'
 // The taxi_horse line, drawn by the session itself on a row of its own under
 // the input box.
 //
-// meter.py counts the tokens. Once a second this mod runs "taxi-horse --state"
-// with the session id and the transcript path, and gets back "<state> <level>"
-// and, when the animal has a mark, "gust", "fire" or "home".
+// meter.py counts the tokens. Once a second, every AWAY_ASK_MS in a window
+// without the focus, this mod runs "taxi-horse --state" with the session id
+// and the transcript path, and gets back "<state> <level>" and, when the
+// animal has a mark, "gust", "fire" or "home".
 // The session names its transcript. A build older than $.session.info() does
 // not: there the path is the one the last classic hook event of the main loop
 // carried for this session, and before the first one the meter answers from
@@ -92,6 +93,11 @@ const POOF_MS = 400
 // The shortest wait between two redraws.
 const MIN_WAIT_MS = 20
 const POLL_MS = 1000
+// How often the meter is asked in a window without the focus: each answer is
+// a Python started, and there the line changes once a second at most anyway.
+// The sign of life is still written every POLL_MS, as the freshness of a sign
+// (TWIN_FRESH_MS here, MOD_FRESH in meter.py) is counted from it.
+const AWAY_ASK_MS = 3000
 const IDLE_MS = 1000
 // How long the wrench, the hourglass or a zzz is there, and how long it is
 // gone, as it blinks.
@@ -796,13 +802,18 @@ export const register: Register = on => {
       }
     }
 
-    const poll = async (now: number): Promise<void> => {
+    // isMeterDue: whether to ask the meter this time, or only to leave the
+    // sign of life and keep drawing what it said last.
+    const poll = async (now: number, isMeterDue: boolean): Promise<void> => {
       try {
         const session = await $.session.id()
         if (signs !== undefined && (await standsBack(`${signs}/${session}.mod`, now))) {
           live = undefined
           problem = undefined
 
+          return
+        }
+        if (!isMeterDue && live !== undefined) {
           return
         }
         if (python === undefined) {
@@ -892,11 +903,20 @@ export const register: Register = on => {
       void tick(beat)
     }
 
-    // The meter is asked once a second beside the redraws: none of them waits
-    // for its answer. The answer is drawn as it comes.
+    // The meter is asked once a second beside the redraws, and every
+    // AWAY_ASK_MS in a window without the focus: none of the redraws waits for
+    // its answer, which is drawn as it comes. Back in the focus it is asked
+    // within a second.
+    let askedAt = -Infinity
     const ask = async (): Promise<void> => {
       try {
-        await poll(await $.clock.now())
+        const now = await $.clock.now()
+        const every = motionOf(sight) === 'away' ? AWAY_ASK_MS : POLL_MS
+        const isMeterDue = now - askedAt >= every - MIN_WAIT_MS
+        if (isMeterDue) {
+          askedAt = now
+        }
+        await poll(now, isMeterDue)
         redrawNow()
       } finally {
         $.clock.after(POLL_MS, () => void ask())

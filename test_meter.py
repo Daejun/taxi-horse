@@ -391,6 +391,31 @@ class MeterTest(unittest.TestCase):
         return subprocess.run([sys.executable, *flags, "-IS", launcher, *args], input=compact(self.data),
                               env=env, capture_output=True, encoding="utf-8")
 
+    def test_a_run_between_turns_imports_neither_json_nor_re(self):
+        # They cost a run as much CPU as all the rest of it (see meter.loads()).
+        self.write(prompt(T0 - 600), assistant(T0 - 590, "m1", [10, 0, 0, 5]))
+        self.assertEqual(self.run_cli("--state").returncode, 0)          # writes the state
+        out = self.run_cli("--state", flags=("-X", "importtime"))
+        self.assertEqual(out.stdout, "vacant 0 home\n", out.stderr)
+        imported = {line.split("|")[-1].strip() for line in out.stderr.splitlines()}
+        self.assertIn("meter", imported)
+        self.assertEqual(imported & {"json", "re", "collections"}, set())
+
+    def test_reads_json_as_json_does(self):
+        import json
+        texts = ['{"a": [1, 2.5, "\\u00e9", null, true, false]}', ' \n{"a":1} \t', '1e400', 'NaN',
+                 '{"a":1,}', '[1] x', '', '{"bad": "\\x"}', '"\\ud83d\\udc0e"', '123456789012345678901234567890']
+        for text in texts + [t.encode() for t in texts] + [b'\xef\xbb\xbf{"bom": 1}', b'{"bad": "\xff"}']:
+            try:
+                want = repr(json.loads(text))
+            except ValueError:
+                want = "ValueError"
+            try:
+                got = repr(meter.loads(text))
+            except ValueError:
+                got = "ValueError"
+            self.assertEqual(got, want, text)
+
     def test_draws_in_utf8_on_a_pipe_whose_encoding_is_not(self):
         # On Windows a pipe has the ANSI code page, which has no emoji. Here
         # the C locale without UTF-8 mode gives a pipe in ASCII.

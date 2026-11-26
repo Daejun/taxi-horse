@@ -62,7 +62,8 @@ running under the input box.
 
 The plugin is a mod (`hooks/register.tsx`, which draws the line through
 `hooks/row.tsx`) and a script (`taxi-horse`, `meter.py`) that counts the
-tokens. The mod runs the script once a second.
+tokens. The mod runs the script once a second, and every 3 seconds in a
+window without the focus.
 
 ## Install
 
