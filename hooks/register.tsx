@@ -63,6 +63,8 @@ const ANIMALS: readonly string[] = [...'🐌🐢🦔🐁🐓🐖🐑🐘🐪🐕
 // What a mark draws right behind a running animal: wind when it has just sped
 // up, fire when that is to a great speed.
 const BEHIND = { gust: '💨', fire: '🔥' } as const
+// What stands right behind an animal asleep.
+const ZZZ = '💤'
 // What stands right behind an animal that stands while its tools run: it is
 // not asleep, a tool is at work.
 const TOOL = '🔧'
@@ -113,6 +115,9 @@ export type Phase = 'run' | 'halt' | 'vacant' | 'wait'
 const waiting = atom({ plugin: 'taxi-horse', key: 'isWaiting' } as const, false)
 export type Mark = '' | keyof typeof BEHIND | 'home'
 
+// What the meter says: the state, the speed level and the mark.
+export type Live = { phase: Phase; level: number; mark: Mark }
+
 export function animal(level: number): string {
   const index = Math.min(ANIMALS.length - 1, Math.max(0, Math.floor(level)))
 
@@ -155,7 +160,7 @@ export function drawnPhase(phase: Phase, isWaiting: boolean): Phase {
 // changing into another animal while awake. Falling asleep and going home do
 // not, and neither does the first picture.
 export function poofs(
-  before: { phase: Phase; level: number; mark: Mark } | undefined,
+  before: Live | undefined,
   phase: Phase,
   level: number,
   mark: Mark = '',
@@ -273,6 +278,21 @@ export function blinkShows(now: number): boolean {
   return Math.floor(now / BLINK_MS) % 2 === 0
 }
 
+// What stands right behind the animal: asleep its zzz, waiting its hourglass,
+// standing its wrench, running the wind or fire of its mark.
+function behindOf(phase: Phase, mark: Mark): string | undefined {
+  switch (phase) {
+    case 'vacant':
+      return ZZZ
+    case 'wait':
+      return WAIT
+    case 'halt':
+      return TOOL
+    case 'run':
+      return mark === 'gust' || mark === 'fire' ? BEHIND[mark] : undefined
+  }
+}
+
 // stamps: an eaten coin at such a column leaves a dollar sign and the fare of
 // that amount (see fareAt()), or paw prints when the amount is less than half
 // a cent. Any other eaten coin leaves nothing.
@@ -300,18 +320,7 @@ export function render(
   // While the animal changes there is only the poof.
   const standing = mark === 'home' ? HOUSE : animalShown(phase, level)
   const glyphs = new Map<number, string>([[x, isChanging ? POOF : standing]])
-  // Asleep its zzz, waiting its hourglass, standing its wrench, running the
-  // wind or fire of its mark.
-  const behind =
-    phase === 'vacant'
-      ? '💤'
-      : phase === 'wait'
-        ? WAIT
-        : phase === 'halt'
-          ? TOOL
-          : mark === '' || mark === 'home'
-            ? undefined
-            : BEHIND[mark]
+  const behind = behindOf(phase, mark)
   if (behind !== undefined && !isChanging) {
     glyphs.set(x + 2, hasBlink || phase === 'run' ? behind : '  ')
   }
@@ -347,7 +356,77 @@ export function render(
   return line.replace(/ +$/, '')
 }
 
-export function parseLive(text: string): { phase: Phase; level: number; mark: Mark } | undefined {
+// The picture between two answers of the meter: how far the animal has run,
+// when it may move its next column, the state last drawn and until when the
+// poof of its change stays, and what it has left in the place of the coins.
+export type Picture = {
+  dist: number
+  stepAt: number
+  drawn: Live | undefined
+  poofUntil: number
+  fares: Fares
+}
+
+export const NEW_PICTURE: Picture = {
+  dist: 0,
+  stepAt: 0,
+  drawn: undefined,
+  poofUntil: 0,
+  fares: { stamps: NO_STAMPS, billed: undefined },
+}
+
+// One redraw at time now, for what the meter said last: the picture after it,
+// the line, and how long to wait for the next redraw. usd is what the session
+// has cost so far, undefined when the engine does not say.
+//
+// A running animal moves one column a redraw, and as many redraws a second as
+// its speed level. A redraw that comes early, for a poof, moves nothing. The
+// wrench, the hourglass and a zzz are redrawn as they come and go.
+export function frame(
+  picture: Picture,
+  live: Live,
+  usd: number | undefined,
+  isWaiting: boolean,
+  now: number,
+): { picture: Picture; line: string; wait: number } {
+  const { level, mark } = live
+  const phase = drawnPhase(live.phase, isWaiting)
+  let { dist, stepAt, poofUntil, fares } = picture
+  if (mark === 'home') {
+    dist = 0
+    fares = homeFares(fares)
+  }
+  let wait = IDLE_MS
+  if (phase === 'run') {
+    if (now >= stepAt - MIN_WAIT_MS) {
+      const before = animalColumn(dist)
+      dist += 1
+      fares = stamped(fares, before, animalColumn(dist), usd)
+      stepAt = now + Math.round(1000 / Math.max(1, level))
+    }
+    wait = stepAt - now
+  }
+  if (poofs(picture.drawn, phase, level, mark)) {
+    poofUntil = now + POOF_MS
+  }
+  // Falling asleep cuts a poof short.
+  const isChanging = !isAsleep(phase, mark) && now < poofUntil
+  if (isChanging) {
+    wait = Math.min(wait, poofUntil - now)
+  }
+  if (phase !== 'run') {
+    wait = Math.min(wait, BLINK_MS - (now % BLINK_MS))
+  }
+  const line = render(phase, level, dist, mark, TRACK, isChanging, fares.stamps, blinkShows(now))
+
+  return {
+    picture: { dist, stepAt, drawn: { phase, level, mark }, poofUntil, fares },
+    line,
+    wait: Math.max(MIN_WAIT_MS, wait),
+  }
+}
+
+export function parseLive(text: string): Live | undefined {
   const [phase, level, mark] = text.trim().split(' ')
   const n = Number(level)
   if ((phase !== 'run' && phase !== 'halt' && phase !== 'vacant') || !Number.isInteger(n)) {
@@ -542,21 +621,13 @@ export const register: Register = on => {
     const pythons = pythonsFor(windows)
     const signs = signDir(await $.env.get('XDG_RUNTIME_DIR'), windows, await $.env.get('TEMP'))
     const self = Math.floor(Math.random() * 1e9)
-    let phase: Phase = 'vacant'
-    let level = 0
-    let mark: Mark = ''
-    let dist = 0
-    // When the animal may move its next column, the state last drawn, and
-    // until when the poof of its change stays.
-    let stepAt = 0
-    let drawn: { phase: Phase; level: number; mark: Mark } | undefined
-    let poofUntil = 0
-    // What the session has cost so far, when the engine says, and what the
-    // animal has left in the place of the coins.
+    // What the meter said last. Undefined while there is no picture to draw:
+    // before its first answer, after a failed one, and while a twin draws.
+    let live: Live | undefined
+    let picture = NEW_PICTURE
+    // What the session has cost so far, when the engine says.
     let usd: number | undefined
-    let fares: Fares = { stamps: NO_STAMPS, billed: undefined }
     let polledAt = 0
-    let isDrawing = false
     // The Python found, and what the row says when the picture cannot be drawn.
     let python: string | undefined
     let problem: string | undefined
@@ -597,7 +668,7 @@ export const register: Register = on => {
       try {
         const session = await $.session.id()
         if (signs !== undefined && (await standsBack(`${signs}/${session}.mod`, now))) {
-          isDrawing = false
+          live = undefined
           problem = undefined
 
           return
@@ -609,7 +680,7 @@ export const register: Register = on => {
           probedAt = now
           const found = await findPython(argv => $.process.run([...argv], { timeoutMs: 5000 }), pythons)
           if ('problem' in found) {
-            isDrawing = false
+            live = undefined
             problem = found.problem
 
             return
@@ -628,9 +699,9 @@ export const register: Register = on => {
           stdin: JSON.stringify({ session_id: session, transcript_path: transcriptFor(session, named, seen) }),
           timeoutMs: 5000,
         })
-        const live = exitCode === 0 ? parseLive(stdout) : undefined
-        if (live === undefined) {
-          isDrawing = false
+        const answer = exitCode === 0 ? parseLive(stdout) : undefined
+        if (answer === undefined) {
+          live = undefined
           failures += 1
           if (failures >= FAILURES_SHOWN) {
             problem = `taxi-horse: ${lastLine(stderr) || `the meter exited with status ${exitCode}`}`
@@ -640,20 +711,13 @@ export const register: Register = on => {
         }
         failures = 0
         problem = undefined
-        phase = live.phase
-        level = live.level
-        mark = live.mark
-        if (mark === 'home') {
-          dist = 0
-          fares = homeFares(fares)
-        }
         usd = await costSoFar()
-        isDrawing = true
+        live = answer
       } catch (error) {
         // The meter did not start or did not finish, or the engine lacks a
         // call made here. After a few times in a row the row says why, and
         // the mod looks for Python again: it may have moved.
-        isDrawing = false
+        live = undefined
         failures += 1
         if (failures >= FAILURES_SHOWN) {
           failures = 0
@@ -670,37 +734,13 @@ export const register: Register = on => {
         if (now - polledAt >= POLL_MS) {
           await poll(now)
         }
-        if (isDrawing && phase === 'run') {
-          // A redraw that comes early, for a poof, moves nothing.
-          if (now >= stepAt - MIN_WAIT_MS) {
-            const before = animalColumn(dist)
-            dist += 1
-            fares = stamped(fares, before, animalColumn(dist), usd)
-            stepAt = now + Math.round(1000 / Math.max(1, level))
-          }
-          wait = stepAt - now
+        let line = problem
+        if (live !== undefined) {
+          const redraw = frame(picture, live, usd, isWaiting, now)
+          picture = redraw.picture
+          line = redraw.line
+          wait = redraw.wait
         }
-        const seen = drawnPhase(phase, isWaiting)
-        if (isDrawing) {
-          if (poofs(drawn, seen, level, mark)) {
-            poofUntil = now + POOF_MS
-          }
-          drawn = { phase: seen, level, mark }
-        }
-        // Falling asleep cuts a poof short.
-        const isChanging = isDrawing && !isAsleep(seen, mark) && now < poofUntil
-        if (isChanging) {
-          wait = Math.min(wait, poofUntil - now)
-        }
-        // The wrench, the hourglass and a zzz are redrawn as they come and go.
-        const hasBlink = blinkShows(now)
-        if (isDrawing && seen !== 'run') {
-          wait = Math.min(wait, BLINK_MS - (now % BLINK_MS))
-        }
-        wait = Math.max(MIN_WAIT_MS, wait)
-        const line = isDrawing
-          ? render(seen, level, dist, mark, TRACK, isChanging, fares.stamps, hasBlink)
-          : problem
         if (line !== shown) {
           shown = line
           $.ui.invalidate('ui.render')

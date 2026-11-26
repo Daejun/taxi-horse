@@ -104,6 +104,8 @@ Run by hand:
 TAXI_HORSE_DEBUG=<file> appends one line per run: time, state, rate, what
 goes behind the animal, and the last thing seen in each transcript.
 """
+
+import collections
 import json
 import math
 import os
@@ -122,6 +124,9 @@ STATE_MAX_AGE = 2 * 86400
 TRACK = 48               # length of the track in columns
 STEP = 1.0               # columns a second. The status line is redrawn once a second
                          # at most, so anything faster would be a jump of several columns.
+COIN_GAP = 10            # a coin every so many columns, from the left end
+REFILL = COIN_GAP * 3 // 2   # columns ahead of the animal at which what it left turns back into a coin
+FARE_MAX = 5             # characters of a fare at most: it ends well before the next coin
 LEVEL_MAX = 16           # speed levels run from 0 to this
 GUST_WINDOW = 10.0       # seconds the speed of the moment is taken over
 GUST_FACTOR = 3.0        # a gust: the moment is this many times the average
@@ -138,25 +143,14 @@ HIST_SIZE = 5 * HIST_PER_DECADE      # 1 to 100000 tok/s
 HIST_CAP = 6000.0        # samples the history holds: older ones fade as new ones come
 SAMPLE_EVERY = 5.0       # seconds between two samples of a session's rate
 FLUSH_EVERY = 60.0       # seconds between two writes of a session's samples to the history
+MOD_FRESH = 3.0          # seconds a mod's sign of life counts for
 
 IN, CW, CR, OUT = range(4)
 USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens",
               "cache_read_input_tokens", "output_tokens")
 
 
-def burned(u):
-    return u[IN] + u[CW] + u[OUT]
-
-
-def parse_ts(s):
-    from datetime import datetime
-    try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
-    except (AttributeError, ValueError):
-        return None
-
-
-# ---------------------------------------------------------------- state
+# ---------------------------------------------------------------- files
 
 def state_dir():
     base = os.environ.get("XDG_RUNTIME_DIR")
@@ -171,50 +165,39 @@ def state_dir():
     return os.path.join(base, "taxi-horse-%d" % os.getuid())
 
 
-def new_state():
-    # tot: tokens by kind; ids: usage already counted per response id;
-    # ev: [time registered, tokens burned] for the rate window
-    return {"v": STATE_VERSION, "files": {}, "tot": [0, 0, 0, 0], "ids": {}, "ev": []}
-
-
-def load_state(path):
-    try:
-        with open(path) as f:
-            st = json.load(f)
-        if st.get("v") == STATE_VERSION:
-            return st
-    except (OSError, ValueError):
-        pass
-    return None
-
-
-def save_state(path, st):
+def write_whole(path, text):
+    """Write a file so that a reader finds the old text or the new, never a part."""
     tmp = "%s.%d.tmp" % (path, os.getpid())
     with open(tmp, "w") as f:
-        json.dump(st, f, separators=(",", ":"))
+        f.write(text)
     os.replace(tmp, path)
 
 
-def drop_old_states(directory, now):
-    try:
-        for e in os.scandir(directory):
-            if now - e.stat().st_mtime > STATE_MAX_AGE:
-                os.unlink(e.path)
-    except OSError:
-        pass
-
-
 # ---------------------------------------------------------------- transcript
+
+def burned(u):
+    return u[IN] + u[CW] + u[OUT]
+
+
+def parse_ts(s):
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except (AttributeError, ValueError):
+        return None
+
 
 def transcript_files(transcript):
     """The session transcript and every sidechain transcript under it."""
     files = [("", transcript)]
     root = transcript[:-len(".jsonl")] if transcript.endswith(".jsonl") else transcript
+    # The key of a file is its path under root, as os.path.relpath() gives it.
+    prefix = os.path.join(root, "")
     for dirpath, _dirs, names in os.walk(os.path.join(root, "subagents")):
         for name in sorted(names):
             if name.endswith(".jsonl"):
                 full = os.path.join(dirpath, name)
-                files.append((os.path.relpath(full, root), full))
+                files.append((full[len(prefix):], full))
     return files
 
 
@@ -336,6 +319,61 @@ def scan(st, transcript, now, history, deadline):
     return changed, True
 
 
+# ---------------------------------------------------------------- the meter's state
+
+def new_state():
+    # tot: tokens by kind; ids: usage already counted per response id;
+    # ev: [time registered, tokens burned] for the rate window
+    return {"v": STATE_VERSION, "files": {}, "tot": [0, 0, 0, 0], "ids": {}, "ev": []}
+
+
+def load_state(path):
+    try:
+        with open(path) as f:
+            st = json.load(f)
+        if st.get("v") == STATE_VERSION:
+            return st
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def save_state(path, st):
+    write_whole(path, json.dumps(st, separators=(",", ":")))
+
+
+def drop_old_states(directory, now):
+    try:
+        for e in os.scandir(directory):
+            if now - e.stat().st_mtime > STATE_MAX_AGE:
+                os.unlink(e.path)
+    except OSError:
+        pass
+
+
+def follow(st, transcript, now, budget):
+    """Read what was appended to the session's transcripts into st.
+
+    Until the first full pass is done the meter is reading history. A
+    transcript that shrank starts the count over.
+
+    Returns (st, changed, complete): st is a new state after a start over.
+    """
+    history = not st.get("live")
+    changed, complete = False, True
+    if transcript:
+        deadline = time.monotonic() + budget
+        changed, complete = scan(st, transcript, now, history, deadline)
+        if changed is None:
+            st, history = new_state(), True
+            changed, complete = scan(st, transcript, now, history, deadline)
+            changed = True
+    if complete and history:
+        st["live"] = True
+        changed = True
+    return st, changed, complete
+
+
 def prune(st, now):
     st["ev"] = [e for e in st["ev"] if e[0] > now - WINDOW]
     ids = st["ids"]
@@ -343,6 +381,8 @@ def prune(st, now):
         for mid in list(ids)[:len(ids) - IDS_MAX]:
             del ids[mid]
 
+
+# ---------------------------------------------------------------- rate and phase
 
 def rate(st, now, window=WINDOW):
     """Tokens registered in the last window seconds, per second."""
@@ -364,7 +404,7 @@ def phase(st, now):
     return found
 
 
-# ---------------------------------------------------------------- speed and position
+# ---------------------------------------------------------------- speed history and levels
 
 def rates_path():
     base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
@@ -398,10 +438,7 @@ def save_rates(path, hist):
     if total > HIST_CAP:                 # the oldest samples fade
         hist = [x * HIST_CAP / total for x in hist]
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = "%s.%d.tmp" % (path, os.getpid())
-    with open(tmp, "w") as f:
-        json.dump({"v": 1, "h": [round(x, 3) for x in hist]}, f, separators=(",", ":"))
-    os.replace(tmp, path)
+    write_whole(path, json.dumps({"v": 1, "h": [round(x, 3) for x in hist]}, separators=(",", ":")))
 
 
 def merge_rates(path, pending):
@@ -412,54 +449,76 @@ def merge_rates(path, pending):
     save_rates(path, hist)
 
 
+def sample(st, now, ph, tok_s, rates):
+    """Remember how fast this user runs: a sample now and then while a turn is
+    on, handed to the history once a minute. Returns whether st changed."""
+    changed = False
+    if ph != VACANT and tok_s > 0 and now - st.get("ht", 0.0) >= SAMPLE_EVERY:
+        pending = st.setdefault("hp", {})
+        key = str(int(bucket_pos(tok_s)))
+        pending[key] = pending.get(key, 0) + 1
+        st["ht"] = now
+        changed = True
+    if st.get("hp") and now - st.get("hf", 0.0) >= FLUSH_EVERY:
+        try:
+            merge_rates(rates, st["hp"])
+            st["hp"] = {}
+        except OSError:
+            pass                         # kept for the next try
+        st["hf"] = now
+        changed = True
+    return changed
+
+
+class Scale:
+    """The speed levels of one history.
+
+    The level of a rate is where it stands among the earlier ones (see
+    level()). The weights below each bucket are added up once here, so that
+    every rate asked of the scale after that costs a few steps.
+    """
+
+    def __init__(self, hist=None):
+        weights = prior()
+        if hist:
+            weights = [a + b for a, b in zip(weights, hist)]
+        self.weights = weights
+        # Summed as level() always summed them: sum() of the buckets below.
+        self.below = [sum(weights[:b]) for b in range(HIST_SIZE)]
+        self.total = sum(weights)
+
+    def level(self, tok_s):
+        if tok_s <= 0:
+            return 0
+        pos = bucket_pos(tok_s)
+        b = int(pos)
+        below = self.below[b] + self.weights[b] * (pos - b)
+        return min(LEVEL_MAX, int(below / self.total * (LEVEL_MAX + 1)))
+
+    def start(self, k):
+        """The lowest rate of level k, in tok/s."""
+        lo, hi = 0.0, 5.0                # log10 of the rate
+        for _ in range(40):
+            mid = (lo + hi) / 2
+            lo, hi = (lo, mid) if self.level(10 ** mid) >= k else (mid, hi)
+        return 10 ** hi
+
+    def starts(self):
+        """The lowest rate of each level from 1 up, in tok/s."""
+        return [self.start(k) for k in range(1, LEVEL_MAX + 1)]
+
+
 def level(tok_s, hist=None):
     """Speed on a scale of 0..LEVEL_MAX: where the rate stands among earlier ones.
 
     It picks the animal and how often the mod redraws.
     """
-    if tok_s <= 0:
-        return 0
-    weights = prior()
-    if hist:
-        weights = [a + b for a, b in zip(weights, hist)]
-    pos = bucket_pos(tok_s)
-    b = int(pos)
-    below = sum(weights[:b]) + weights[b] * (pos - b)
-    return min(LEVEL_MAX, int(below / sum(weights) * (LEVEL_MAX + 1)))
+    return Scale(hist).level(tok_s) if tok_s > 0 else 0
 
 
 def level_starts(hist=None):
     """The lowest rate of each level from 1 up, in tok/s."""
-    starts = []
-    for k in range(1, LEVEL_MAX + 1):
-        lo, hi = 0.0, 5.0                # log10 of the rate
-        for _ in range(40):
-            mid = (lo + hi) / 2
-            lo, hi = (lo, mid) if level(10 ** mid, hist) >= k else (mid, hi)
-        starts.append(10 ** hi)
-    return starts
-
-
-GUST, FIRE, HOME = "gust", "fire", "home"
-
-
-def mark(st, now, ph, tok_s, hist=None):
-    """What the state alone does not say: the speed of the moment while the
-    animal runs, and whether it sleeps at home.
-
-    GUST while running, when the last GUST_WINDOW seconds ran at GUST_FACTOR
-    times the average or more, and fast enough to be more than a snail. FIRE
-    when that is also FIRE_FACTOR times the speed the fastest animal starts at.
-    HOME between turns, when the average is 0 too. Otherwise "": a standing
-    animal has no mark, its wrench is drawn for the state.
-    """
-    if ph == RUN:
-        fast = rate(st, now, GUST_WINDOW)
-        if fast > 0 and fast >= GUST_FACTOR * tok_s and level(fast, hist) >= 1:
-            return FIRE if fast >= FIRE_FACTOR * level_starts(hist)[-1] else GUST
-    elif ph == VACANT and tok_s <= 0:
-        return HOME
-    return ""
+    return Scale(hist).starts()
 
 
 def learn(root=None, limit=200, path=None):
@@ -495,32 +554,92 @@ def learn(root=None, limit=200, path=None):
     return int(sum(hist))
 
 
-def load_run(path):
-    """(distance, time, was it running, stamps, billed) as advance() left them."""
-    try:
-        with open(path) as f:
-            dist, t, running, *rest = f.read().split()
-        stamps, billed = {}, None
-        for word in rest:
-            if word.startswith("@"):
-                billed = float(word[1:])
-            else:
-                c, usd = word.split(":")
-                stamps[int(c)] = float(usd)
-        return float(dist), float(t), running == "1", stamps, billed
-    except (OSError, ValueError):
-        return 0.0, 0.0, False, {}, None
+# ---------------------------------------------------------------- marks
+
+GUST, FIRE, HOME = "gust", "fire", "home"
 
 
-def save_run(path, dist, t, running, stamps=None, billed=None):
-    tmp = "%s.%d.tmp" % (path, os.getpid())
-    with open(tmp, "w") as f:
-        f.write("%.3f %.3f %d" % (dist, t, running))
-        if billed is not None:
-            f.write(" @%r" % billed)
-        for c, usd in sorted((stamps or {}).items()):
-            f.write(" %d:%r" % (c, usd))
-    os.replace(tmp, path)
+def mark(st, now, ph, tok_s, scale):
+    """What the state alone does not say: the speed of the moment while the
+    animal runs, and whether it sleeps at home. scale: the levels (Scale) of
+    this user's history.
+
+    GUST while running, when the last GUST_WINDOW seconds ran at GUST_FACTOR
+    times the average or more, and fast enough to be more than a snail. FIRE
+    when that is also FIRE_FACTOR times the speed the fastest animal starts at.
+    HOME between turns, when the average is 0 too. Otherwise "": a standing
+    animal has no mark, its wrench is drawn for the state.
+    """
+    if ph == RUN:
+        fast = rate(st, now, GUST_WINDOW)
+        if fast > 0 and fast >= GUST_FACTOR * tok_s and scale.level(fast) >= 1:
+            return FIRE if fast >= FIRE_FACTOR * scale.start(LEVEL_MAX) else GUST
+    elif ph == VACANT and tok_s <= 0:
+        return HOME
+    return ""
+
+
+# ---------------------------------------------------------------- the track and the fares
+
+def track_width():
+    cols = os.environ.get("COLUMNS", "")
+    if cols.isdigit():
+        return max(12, min(TRACK, int(cols) - 4))
+    return TRACK
+
+
+def lap_length(width=TRACK):
+    """Positions in one lap: the columns the animal runs through, then the last coin's."""
+    return width - 2
+
+
+def animal_column(dist, width=TRACK):
+    """Left column of the animal. The glyphs face left, so it runs right to left.
+
+    From column width-2 down to column 2, then column 0, onto the last coin. It
+    is never at column 1: the line always starts with a coin or with the animal.
+    """
+    lap = lap_length(width)
+    pos = int(dist) % lap
+    return 0 if pos == lap - 1 else width - 2 - pos
+
+
+def coin_columns(width=TRACK):
+    """Left column of every coin of a lap."""
+    return range(0, width - 4, COIN_GAP)
+
+
+def cost_of(data):
+    """The session's cost so far in a status line input, in US dollars, or
+    None when it carries none."""
+    cost = data.get("cost")
+    usd = cost.get("total_cost_usd") if isinstance(cost, dict) else None
+    if isinstance(usd, bool) or not isinstance(usd, (int, float)) or not 0 <= usd < math.inf:
+        return None
+    return float(usd)
+
+
+def fare(usd):
+    """An amount as the digits behind a dollar sign: as many decimals, two at
+    most, as fit in FARE_MAX characters. Halves round up, as in the mod. An
+    amount of less than half a cent has no fare: ""."""
+    if math.floor(usd * 100 + 0.5) < 1:
+        return ""
+    for digits in (2, 1, 0):
+        unit = 10 ** digits
+        n = int(math.floor(usd * unit + 0.5))
+        text = "%d.%0*d" % (n // unit, digits, n % unit) if digits else "%d" % n
+        if len(text) <= FARE_MAX:
+            break
+    return text
+
+
+def fare_at(usd, c, width):
+    """The fare drawn for an amount behind a dollar sign at column c: "" when
+    the amount has none, or it does not fit before the next dollar sign and on
+    the track."""
+    text = fare(usd)
+    return text if len(text) <= min(FARE_MAX, width - c - 2) else ""
 
 
 def stamped(stamps, billed, before, x, usd, width=None):
@@ -559,6 +678,33 @@ def stamped(stamps, billed, before, x, usd, width=None):
             elif not fare(amount):
                 stamps[c] = amount
     return stamps, billed
+
+
+# ---------------------------------------------------------------- the run
+
+def load_run(path):
+    """(distance, time, was it running, stamps, billed) as advance() left them."""
+    try:
+        with open(path) as f:
+            dist, t, running, *rest = f.read().split()
+        stamps, billed = {}, None
+        for word in rest:
+            if word.startswith("@"):
+                billed = float(word[1:])
+            else:
+                c, usd = word.split(":")
+                stamps[int(c)] = float(usd)
+        return float(dist), float(t), running == "1", stamps, billed
+    except (OSError, ValueError):
+        return 0.0, 0.0, False, {}, None
+
+
+def save_run(path, dist, t, running, stamps=None, billed=None):
+    words = ["%.3f %.3f %d" % (dist, t, running)]
+    if billed is not None:
+        words.append("@%r" % billed)
+    words.extend("%d:%r" % (c, usd) for c, usd in sorted((stamps or {}).items()))
+    write_whole(path, " ".join(words))
 
 
 def advance(path, running, now, lap, usd=None, home=False):
@@ -606,15 +752,13 @@ def advance(path, running, now, lap, usd=None, home=False):
 COIN = "🪙"
 EATEN = "💲"                         # what stands in an eaten coin's place, in front of its fare
 PRINTS = "🐾"                        # what stands there when the stretch has cost less than half a cent
-COIN_GAP = 10                        # a coin every so many columns, from the left end
-REFILL = COIN_GAP * 3 // 2           # columns ahead of the animal at which what it left turns back into a coin
-FARE_MAX = 5                         # characters of a fare at most: it ends well before the next coin
 # The animal for each speed level, slowest first: (lowest level, glyph). All of
 # them face left in Noto Color Emoji and are one code point two columns wide.
 # snail, turtle, hedgehog, mouse, rooster, pig, sheep, elephant, camel, dog,
 # rabbit, kangaroo, deer, horse, tiger, leopard, eagle. With the rates of 150
 # recent sessions the median is the elephant and the 94th percentile the deer.
 ANIMALS = tuple(enumerate("🐌🐢🦔🐁🐓🐖🐑🐘🐪🐕🐇🦘🦌🐎🐅🐆🦅"))
+ZZZ = "💤"                           # what stands behind an animal asleep
 BEHIND = {GUST: "💨", FIRE: "🔥"}     # what a mark draws behind a running animal
 TOOL = "🔧"                          # what stands behind an animal that stands while its tools run
 HOUSE = "🏠"                         # what stands in place of an animal that is at home
@@ -622,67 +766,6 @@ HOUSE = "🏠"                         # what stands in place of an animal that 
 
 def animal(lvl):
     return [glyph for lowest, glyph in ANIMALS if lvl >= lowest][-1]
-
-
-def coin_columns(width=TRACK):
-    """Left column of every coin of a lap."""
-    return range(0, width - 4, COIN_GAP)
-
-
-def cost_of(data):
-    """The session's cost so far in a status line input, in US dollars, or
-    None when it carries none."""
-    cost = data.get("cost")
-    usd = cost.get("total_cost_usd") if isinstance(cost, dict) else None
-    if isinstance(usd, bool) or not isinstance(usd, (int, float)) or not 0 <= usd < math.inf:
-        return None
-    return float(usd)
-
-
-def fare(usd):
-    """An amount as the digits behind a dollar sign: as many decimals, two at
-    most, as fit in FARE_MAX characters. Halves round up, as in the mod. An
-    amount of less than half a cent has no fare: ""."""
-    if math.floor(usd * 100 + 0.5) < 1:
-        return ""
-    for digits in (2, 1, 0):
-        unit = 10 ** digits
-        n = int(math.floor(usd * unit + 0.5))
-        text = "%d.%0*d" % (n // unit, digits, n % unit) if digits else "%d" % n
-        if len(text) <= FARE_MAX:
-            break
-    return text
-
-
-def fare_at(usd, c, width):
-    """The fare drawn for an amount behind a dollar sign at column c: "" when
-    the amount has none, or it does not fit before the next dollar sign and on
-    the track."""
-    text = fare(usd)
-    return text if len(text) <= min(FARE_MAX, width - c - 2) else ""
-
-
-def track_width():
-    cols = os.environ.get("COLUMNS", "")
-    if cols.isdigit():
-        return max(12, min(TRACK, int(cols) - 4))
-    return TRACK
-
-
-def lap_length(width=TRACK):
-    """Positions in one lap: the columns the animal runs through, then the last coin's."""
-    return width - 2
-
-
-def animal_column(dist, width=TRACK):
-    """Left column of the animal. The glyphs face left, so it runs right to left.
-
-    From column width-2 down to column 2, then column 0, onto the last coin. It
-    is never at column 1: the line always starts with a coin or with the animal.
-    """
-    lap = lap_length(width)
-    pos = int(dist) % lap
-    return 0 if pos == lap - 1 else width - 2 - pos
 
 
 def blink_shows(now):
@@ -710,23 +793,28 @@ def render(ph, lvl, dist, catching_up=False, width=None, mark="", stamps=None, b
     stays empty: what it hides does not come back meanwhile."""
     if width is None:
         width = track_width()
+    stamps = stamps or {}
     x = animal_column(dist, width)
     # Two-column glyphs by their left column. The animal and what is right
     # behind it come first: a coin or a fare they would overlap is left out.
     glyphs = {x: HOUSE if mark == HOME else animal(0 if ph == VACANT else lvl)}
-    behind = "💤" if ph == VACANT else TOOL if ph == HALT else BEHIND.get(mark)
+    behind = ZZZ if ph == VACANT else TOOL if ph == HALT else BEHIND.get(mark)
     if behind:
         glyphs[x + 2] = behind if blink or ph == RUN else "  "
+    taken = list(glyphs)
     fares = {}                           # one-column characters by their first column
     for c in coin_columns(width):
-        if any(abs(c - taken) < 2 for taken in list(glyphs)):
+        if any(abs(c - col) < 2 for col in taken):
             continue
-        if c < x and not (stamps and c in stamps and x > c + REFILL):
+        usd = stamps.get(c)
+        if c < x and not (usd is not None and x > c + REFILL):
             glyphs[c] = COIN
-        elif stamps and c in stamps and fare_at(stamps[c], c, width):
+            continue
+        text = "" if usd is None else fare_at(usd, c, width)
+        if text:
             glyphs[c] = EATEN
-            fares[c + 2] = fare_at(stamps[c], c, width)
-        elif stamps and c in stamps and not fare(stamps[c]):
+            fares[c + 2] = text
+        elif usd is not None and not fare(usd):
             glyphs[c] = PRINTS
     line, col = "", 0
     while col < max(width, max(glyphs) + 2):
@@ -747,54 +835,37 @@ def render(ph, lvl, dist, catching_up=False, width=None, mark="", stamps=None, b
 
 # ---------------------------------------------------------------- entry points
 
+# What measure() reads for a session. phase: RUN, HALT or VACANT; rate: tok/s;
+# counted: tokens counted in all; catching_up: still reading a long transcript
+# for the first time; dist: how far the animal has run, in columns; level: the
+# speed level; mark: GUST, FIRE, HOME or ""; stamps: what the animal has left
+# (see stamped()).
+Reading = collections.namedtuple(
+    "Reading", "phase rate counted catching_up dist level mark stamps")
+
+
+def session_of(data):
+    """The session's name for its files."""
+    return os.path.basename(str(data.get("session_id") or "unknown"))
+
+
 def measure(data, now, directory=None, budget=SCAN_BUDGET, rates=None):
-    """Return (state, tok/s, tokens counted, catching_up, distance run, level,
-    mark, stamps) for a status line input."""
-    transcript = data.get("transcript_path")
-    session = os.path.basename(str(data.get("session_id") or "unknown"))
+    """Return the Reading for a status line input."""
+    session = session_of(data)
     directory = directory or state_dir()
     path = os.path.join(directory, session + ".json")
     st = load_state(path)
     created = st is None
-    if created:
-        st = new_state()
-    # Until the first full pass is done the meter is reading history.
-    history = not st.get("live")
-    changed, complete = False, True
-    if transcript:
-        deadline = time.monotonic() + budget
-        changed, complete = scan(st, transcript, now, history, deadline)
-        if changed is None:
-            st, history = new_state(), True
-            changed, complete = scan(st, transcript, now, history, deadline)
-            changed = True
-    if complete and history:
-        st["live"] = True
-        changed = True
+    st, changed, complete = follow(st or new_state(), data.get("transcript_path"), now, budget)
     before = len(st["ev"])
     prune(st, now)
     tok_s = rate(st, now)
     ph = phase(st, now)
-    # Remember how fast this user runs: a sample now and then while a turn is
-    # on, handed to the history once a minute.
     rates = rates or rates_path()
-    if ph != VACANT and tok_s > 0 and now - st.get("ht", 0.0) >= SAMPLE_EVERY:
-        pending = st.setdefault("hp", {})
-        key = str(int(bucket_pos(tok_s)))
-        pending[key] = pending.get(key, 0) + 1
-        st["ht"] = now
-        changed = True
-    if st.get("hp") and now - st.get("hf", 0.0) >= FLUSH_EVERY:
-        try:
-            merge_rates(rates, st["hp"])
-            st["hp"] = {}
-        except OSError:
-            pass                         # kept for the next try
-        st["hf"] = now
-        changed = True
-    hist = load_rates(rates)
-    lvl = level(tok_s, hist)
-    mk = mark(st, now, ph, tok_s, hist)
+    changed = sample(st, now, ph, tok_s, rates) or changed
+    scale = Scale(load_rates(rates))
+    lvl = scale.level(tok_s)
+    mk = mark(st, now, ph, tok_s, scale)
     if changed or created or len(st["ev"]) != before:
         os.makedirs(directory, mode=0o700, exist_ok=True)
         if created:
@@ -802,19 +873,22 @@ def measure(data, now, directory=None, budget=SCAN_BUDGET, rates=None):
         save_state(path, st)
     dist, stamps = advance(os.path.join(directory, session + ".run"), ph == RUN, now,
                            lap_length(track_width()), cost_of(data), mk == HOME)
+    reading = Reading(ph, tok_s, burned(st["tot"]), not complete, dist, lvl, mk, stamps)
     debug = os.environ.get("TAXI_HORSE_DEBUG")
     if debug:
-        tails = " ".join("%s:%s/%d/%.0fs" % (k or "main", fs["tail"] or "-", fs["pend"],
-                                              now - fs["ts"])
-                         for k, fs in st["files"].items())
-        with open(debug, "a") as f:
-            f.write("%.3f %s %s rate=%.1f level=%d mark=%s dist=%.1f counted=%d new=%s %s\n"
-                    % (now, session[:8], ph, tok_s, lvl, mk or "-", dist, burned(st["tot"]),
-                       bool(changed), tails))
-    return ph, tok_s, burned(st["tot"]), not complete, dist, lvl, mk, stamps
+        write_debug(debug, now, session, st, reading, changed)
+    return reading
 
 
-MOD_FRESH = 3.0          # seconds a mod's sign of life counts for
+def write_debug(path, now, session, st, reading, changed):
+    """Append one line of what this run read to the TAXI_HORSE_DEBUG file."""
+    tails = " ".join("%s:%s/%d/%.0fs" % (k or "main", fs["tail"] or "-", fs["pend"],
+                                          now - fs["ts"])
+                     for k, fs in st["files"].items())
+    with open(path, "a") as f:
+        f.write("%.3f %s %s rate=%.1f level=%d mark=%s dist=%.1f counted=%d new=%s %s\n"
+                % (now, session[:8], reading.phase, reading.rate, reading.level,
+                   reading.mark or "-", reading.dist, reading.counted, bool(changed), tails))
 
 
 def mod_draws(directory, session, now):
@@ -848,11 +922,19 @@ def demo():
 
 
 def show_levels():
-    hist = load_rates(rates_path())
-    print("%d samples in %s" % (sum(hist), rates_path()))
-    print("%s  below %.0f tok/s" % (animal(0), level_starts(hist)[0]))
-    for k, start in enumerate(level_starts(hist), 1):
+    path = rates_path()
+    hist = load_rates(path)
+    starts = level_starts(hist)
+    print("%d samples in %s" % (sum(hist), path))
+    print("%s  below %.0f tok/s" % (animal(0), starts[0]))
+    for k, start in enumerate(starts, 1):
         print("%s  from %.0f tok/s" % (animal(k), start))
+
+
+def read_input():
+    """The JSON on stdin. Claude Code and the mod write it in UTF-8, and on
+    Windows a pipe is read in the ANSI code page: read the bytes."""
+    return json.loads(sys.stdin.buffer.read())
 
 
 def main():
@@ -869,18 +951,12 @@ def main():
     data = read_input()
     now = time.time()
     directory = state_dir()
-    session = os.path.basename(str(data.get("session_id") or "unknown"))
-    ph, _tok_s, _counted, catching_up, dist, lvl, mk, stamps = measure(data, now, directory)
+    r = measure(data, now, directory)
     if "--state" in sys.argv:
-        print(("%s %d %s" % (ph, lvl, mk)).rstrip())
-    elif not mod_draws(directory, session, now):
-        print(render(ph, lvl, dist, catching_up, mark=mk, stamps=stamps, blink=blink_shows(now)))
-
-
-def read_input():
-    """The JSON on stdin. Claude Code and the mod write it in UTF-8, and on
-    Windows a pipe is read in the ANSI code page: read the bytes."""
-    return json.loads(sys.stdin.buffer.read())
+        print(("%s %d %s" % (r.phase, r.level, r.mark)).rstrip())
+    elif not mod_draws(directory, session_of(data), now):
+        print(render(r.phase, r.level, r.dist, r.catching_up, mark=r.mark, stamps=r.stamps,
+                     blink=blink_shows(now)))
 
 
 def cli():

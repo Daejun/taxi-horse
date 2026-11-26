@@ -689,7 +689,7 @@ class MeterTest(unittest.TestCase):
         top = meter.level_starts(hist)[-1]
         for tokens, want in ((meter.FIRE_FACTOR * top * 10 - 10, meter.GUST), (meter.FIRE_FACTOR * top * 10, meter.FIRE)):
             st = {"ev": [(T0 - 1, tokens)]}
-            self.assertEqual(meter.mark(st, T0, RUN, tokens / W, hist), want, tokens)
+            self.assertEqual(meter.mark(st, T0, RUN, tokens / W, meter.Scale(hist)), want, tokens)
 
     def test_standing_animal_has_no_mark_and_no_zzz(self):
         self.run_meter(T0)
@@ -1058,5 +1058,111 @@ class MeterTest(unittest.TestCase):
         os.environ["COLUMNS"] = "200"
         self.assertEqual(meter.track_width(), meter.TRACK)
 
+
+# ---- the mod's pictures
+
+PICTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hooks", "pictures.ts")
+LINE_DISTS = (0, 1, 5, 6, 7, 8, 13, 14, 15, 22, 23, 29, 36, 37, 38, 77)
+MARK_DISTS = (0, 1, 5, 6, 7, 13, 14, 22, 30, 36, 37, 38, 39, 77)
+STAMPS = {0: 1.5, 10: 1.4, 20: 1.31, 30: 1.12, 40: 1.07}
+LEFT = {40: 0.05, 30: 0.002, 20: 0.19, 10: 1.2, 0: 0.03}
+FARES = (0, 0.004, 0.0049, 0.005, 0.006, 0.05, 0.1, 0.125, 0.995, 1, 1.005, 1.239, 2.675, 9.999,
+         12.3, 12.345, 99.99, 99.994, 99.995, 99.999, 100, 123.44, 123.45, 999.94, 999.95, 999.96,
+         1000, 1234.4, 1234.5, 99999.4, 99999.5, 100000, 1234567.8)
+
+
+def ts(value):
+    """A value as a TypeScript literal."""
+    if isinstance(value, str):
+        assert "'" not in value and "\\" not in value, value
+        return "'%s'" % value
+    if isinstance(value, dict):
+        return "new Map(%s)" % ts(list(value.items()))
+    if isinstance(value, (tuple, list)):
+        return "[%s]" % ", ".join(ts(v) for v in value)
+    return repr(value)
+
+
+def walk(cost, up_to):
+    """Runs the animal a column at a time, as walk() in the mod's tests does,
+    and keeps what is drawn at each distance."""
+    stamps, billed, drawn = {}, None, {}
+    for dist in range(1, up_to + 1):
+        stamps, billed = meter.stamped(stamps, billed, meter.animal_column(dist - 1),
+                                       meter.animal_column(dist), cost(dist))
+        drawn[dist] = meter.render(RUN, 7, dist, width=meter.TRACK, stamps=stamps)
+    return drawn
+
+
+def pictures():
+    """hooks/pictures.ts: what meter.py draws, for the mod's tests to draw the same."""
+    def line(ph, lvl, dist, mk="", stamps=None):
+        return meter.render(ph, lvl, dist, width=meter.TRACK, mark=mk, stamps=stamps)
+
+    def nearer(dist):
+        # On the next lap the stamp of a coin goes when the animal reaches it.
+        x = meter.animal_column(dist)
+        return LEFT if dist == 45 else {c: usd for c, usd in LEFT.items() if c < x}
+
+    fast, slow = walk(lambda d: 1 + d / 100, 54), walk(lambda d: d / 2500, 45)
+    out = [
+        "// What meter.py draws, for the mod's tests: the two must stay the same\n"
+        "// picture. Written by `python3 test_meter.py --pictures` from meter.py, and\n"
+        "// test_meter checks that it is still what meter.py draws. Do not edit.\n\n"
+        "import type { Mark, Phase } from './register'\n"]
+
+    def table(comment, name, kind, rows):
+        out.append("\n%s\nexport const %s: readonly (readonly [%s])[] = [\n%s]\n"
+                   % (comment, name, kind, "".join("  %s,\n" % ts(r) for r in rows)))
+
+    def stamps(comment, name, value):
+        out.append("\n%s\nexport const %s: ReadonlyMap<number, number> = %s\n" % (comment, name, ts(value)))
+
+    table("// meter.render() for a state, level and distance. Without stamps an eaten\n"
+          "// coin leaves nothing.",
+          "LINES", "Phase, number, number, string",
+          [(ph, lvl, d, line(ph, lvl, d)) for ph in (RUN, HALT, VACANT)
+           for lvl in (0, 3, 7, 12, 16) for d in LINE_DISTS])
+    table("// meter.animal_column() for a distance.",
+          "COLUMNS", "number, number", [(d, meter.animal_column(d)) for d in range(96)])
+    table("// The same as LINES, with something behind the animal: meter.render(..., mark=...).",
+          "MARKED", "Phase, number, number, Mark, string",
+          [(ph, lvl, d, mk, line(ph, lvl, d, mk))
+           for ph, mk in ((RUN, meter.GUST), (RUN, meter.FIRE), (HALT, ""),
+                          (VACANT, meter.GUST), (VACANT, meter.HOME))
+           for lvl in (0, 7, 16) for d in ((30, 39) if ph == HALT else MARK_DISTS)])
+    stamps("// What the animal has left, behind it on this lap and ahead of it on the lap\n"
+           "// before.", "STAMPS", STAMPS)
+    table("// The same again with those stamps: meter.render(..., stamps=STAMPS).",
+          "STAMPED", "Phase, number, number, Mark, string",
+          [(ph, lvl, d, mk, line(ph, lvl, d, mk, STAMPS))
+           for ph, lvl, mk in ((RUN, 7, ""), (RUN, 13, meter.GUST), (HALT, 7, ""), (VACANT, 7, ""))
+           for d in range(39)])
+    table("// What meter.fare() makes of a cost.",
+          "FARES", "number, string", [(usd, meter.fare(usd)) for usd in FARES])
+    table("// A lap and the start of the next, a column at a time, the cost 1 + dist / 100:\n"
+          "// what meter.render() draws with the stamps meter.stamped() has made by then.",
+          "WALKED", "number, string",
+          [(d, fast[d]) for d in (5, 6, 8, 16, 18, 36, 38, 44, 45, 46, 51, 52, 54)])
+    table("// The same with a cost of dist / 2500: a twenty-fifth of a cent a column.",
+          "CREPT", "number, string", [(d, slow[d]) for d in (8, 18, 28, 38, 45)])
+    stamps("// What a lap has left.", "LEFT", LEFT)
+    table("// The line at each distance from the end of that lap to the end of the next,\n"
+          "// on which nothing new is left: meter.render() with what is still left.",
+          "NEXT_LAP", "number, string", [(d, line(RUN, 7, d, "", nearer(d))) for d in range(45, 92)])
+    return "".join(out)
+
+
+class PicturesTest(unittest.TestCase):
+    def test_the_mod_is_tested_against_what_meter_draws(self):
+        with open(PICTURES, encoding="utf-8") as f:
+            self.assertEqual(f.read(), pictures(),
+                             "hooks/pictures.ts is not what meter.py draws: python3 test_meter.py --pictures")
+
+
 if __name__ == "__main__":
-    unittest.main()
+    if sys.argv[1:] == ["--pictures"]:
+        with open(PICTURES, "w", encoding="utf-8", newline="\n") as f:
+            f.write(pictures())
+    else:
+        unittest.main()

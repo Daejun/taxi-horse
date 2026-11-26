@@ -309,10 +309,14 @@ to that file: time, state, rate, level.
 In a clone:
 
 ```sh
-python3 -m unittest test_meter    # the script
+python3 -m unittest test_meter    # the script, and that hooks/pictures.ts is what it draws
 claude plugin test .              # the mod draws what the script draws
 claude plugin validate .          # the marketplace, the manifest, the mod's types
 ```
+
+`hooks/pictures.ts` holds what the script draws, and the mod's tests draw
+the same. After a change to the picture, write it again with
+`python3 test_meter.py --pictures`.
 
 ## Troubleshooting
 
