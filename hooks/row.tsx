@@ -4,10 +4,10 @@ import type { ClientModule } from 'claude-code'
 //
 // The surface knows what the hooks module cannot: whether the window the row
 // is drawn in has the focus, and whether the viewer asked for less motion.
-// The row tells the hooks module when either changes, and the picture rests
-// with nobody looking (see frame() in register.tsx). A build too old to say
-// leaves them undefined: the window is taken to have the focus, and motion
-// as it always was.
+// The row tells the hooks module when either changes, and the picture is
+// redrawn less often with nobody looking (see frame() in register.tsx). A
+// build too old to say leaves them undefined: the window is taken to have the
+// focus, and motion as it always was.
 
 // What the row has told the hooks module.
 type Sight = { isFocused: boolean; isMotionReduced: boolean }

@@ -3,8 +3,8 @@
 This is the counting half. There are two ways to run it.
 
 With the mod (the plugin this file ships in): the mod runs
-"taxi-horse --state" once a second, every 3 seconds in a window without the
-focus, with the session id and the transcript path as JSON on stdin, gets back "<state> <level>", with a third word when
+"taxi-horse --state" once a second, with the session id and the transcript
+path as JSON on stdin, gets back "<state> <level>", with a third word when
 the animal has a mark ("gust", "fire" or "home"), and draws the
 line itself, on a row of its own under the input box. It redraws as often as the animal
 moves a column, so the animal never jumps.

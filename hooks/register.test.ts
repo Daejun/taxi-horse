@@ -432,7 +432,8 @@ test('drops the stamp of the lap before when the animal reaches its coin again',
 
 test('blinks the wrench and every zzz and leaves their place empty meanwhile', async () => {
   // A second there, a second gone.
-  expect([0, 999, 1000, 1999, 2000].map(blinkShows)).toEqual([true, true, false, false, true])
+  expect([0, 999, 1000, 1999, 2000].map(now => blinkShows(now))).toEqual([true, true, false, false, true])
+  expect([0, 1999, 2000, 3999, 4000].map(now => blinkShows(now, 2000))).toEqual([true, true, false, false, true])
   for (let dist = 0; dist < 100; dist += 1) {
     for (const [phase, mark, glyph] of [['vacant', '', '💤'], ['vacant', 'home', '💤'], ['halt', '', '🔧']] as const) {
       const there = render(phase, 7, dist, mark, 48, false, STAMPS)
@@ -588,29 +589,56 @@ test('takes a new speed level over a few steps, and starts a run at its own', as
   expect(frame(asleep.picture, { phase: 'run', level: 4, mark: '' }, undefined, false, now + 6_000).wait).toBe(250)
 })
 
-test('away from the focus runs a column a second, and only the signs of work blink', async () => {
-  // A level 16 animal runs a column a second, on the beat, with no poof.
-  const asleep = frame(NEW_PICTURE, ASLEEP, undefined, false, 10_000, 'away')
-  let redraw = frame(asleep.picture, { phase: 'run', level: 16, mark: 'fire' }, undefined, false, 10_500, 'away')
-  expect([redraw.picture.dist, redraw.wait, redraw.line]).toEqual([1, 1000, render('run', 16, 1, 'fire')])
-  for (let dist = 2; dist <= 4; dist += 1) {
-    redraw = frame(redraw.picture, { phase: 'run', level: 16, mark: 'fire' }, undefined, false, redraw.picture.stepAt, 'away')
-    expect([redraw.picture.dist, redraw.wait]).toEqual([dist, 1000])
+test('away from the focus runs as fast, two columns a redraw, and blinks half as often', async () => {
+  // Over the same ten seconds on the beat a level 7 animal runs the same 70
+  // columns: with the focus a column a redraw, away two.
+  const run7: Live = { phase: 'run', level: 7, mark: '' }
+  const runFor = (motion: Motion): [number, number] => {
+    let redraw = frame(NEW_PICTURE, run7, undefined, false, 10_000, motion)
+    const start = redraw.picture.dist
+    let redraws = 0
+    while (redraw.picture.stepAt <= 20_010) {
+      redraw = frame(redraw.picture, run7, undefined, false, redraw.picture.stepAt, motion)
+      redraws += 1
+    }
+
+    return [redraw.picture.dist - start, redraws]
   }
-  // Back in the focus it speeds up to its own pace over a few steps.
-  const waits: number[] = []
-  for (let k = 0; k < 10; k += 1) {
-    redraw = frame(redraw.picture, { phase: 'run', level: 16, mark: 'fire' }, undefined, false, redraw.picture.stepAt)
-    waits.push(redraw.wait)
-  }
-  expect(waits).toEqual([532, 297, 180, 122, 92, 78, 70, 67, 65, 64])
-  // The wrench and the hourglass blink; the zzz stands still, there.
+  expect(runFor('full')).toEqual([70, 70])
+  expect(runFor('away')).toEqual([70, 35])
+
+  // A level 4 animal: two columns every 500 ms, a redraw before the step
+  // moves nothing, and a new animal still poofs.
+  let redraw = frame(NEW_PICTURE, { phase: 'run', level: 4, mark: '' }, undefined, false, 10_000, 'away')
+  expect([redraw.picture.dist, redraw.wait]).toEqual([2, 500])
+  const early = frame(redraw.picture, { phase: 'run', level: 4, mark: '' }, undefined, false, 10_300, 'away')
+  expect([early.picture.dist, early.wait]).toEqual([2, 200])
+  redraw = frame(redraw.picture, { phase: 'run', level: 12, mark: '' }, undefined, false, 10_500, 'away')
+  expect([redraw.picture.dist, redraw.line]).toEqual([4, render('run', 12, 4, '', 48, true)])
+
+  // Back in the focus the next column comes within a column's time, not after
+  // the rest of the step, and then a column a redraw.
+  const run4: Live = { phase: 'run', level: 4, mark: '' }
+  const away = frame(NEW_PICTURE, run4, undefined, false, 10_000, 'away')
+  const back = frame(away.picture, run4, undefined, false, 10_050)
+  expect([back.picture.dist, back.wait]).toEqual([2, 250])
+  const next = frame(back.picture, run4, undefined, false, back.picture.stepAt)
+  expect([next.picture.dist, next.wait]).toEqual([3, 250])
+
+  // The wrench, the hourglass and the zzz blink, two seconds there and two
+  // gone.
   const halt: Live = { phase: 'halt', level: 7, mark: '' }
-  expect(frame(NEW_PICTURE, halt, undefined, false, 10_250, 'away')).toMatchObject({ line: render('halt', 7, 0), wait: 750 })
-  expect(frame(NEW_PICTURE, halt, undefined, false, 11_000, 'away').line).toBe(render('halt', 7, 0, '', 48, false, new Map(), false))
-  expect(frame(NEW_PICTURE, ASLEEP, undefined, true, 11_000, 'away').line).toBe(render('wait', 0, 0, '', 48, false, new Map(), false))
-  for (const now of [10_250, 11_000]) {
-    expect(frame(NEW_PICTURE, ASLEEP, undefined, false, now, 'away')).toMatchObject({ line: render('vacant', 0, 0), wait: 1000 })
+  for (const [live, isWaiting, phase] of [
+    [halt, false, 'halt'],
+    [ASLEEP, true, 'wait'],
+    [ASLEEP, false, 'vacant'],
+  ] as const) {
+    const lines = [12_000, 13_000, 13_999, 14_000, 15_000, 15_999, 16_000].map(
+      now => frame(NEW_PICTURE, live, undefined, isWaiting, now, 'away').line,
+    )
+    const shown = render(phase, live.level, 0)
+    const gone = render(phase, live.level, 0, '', 48, false, new Map(), false)
+    expect(lines).toEqual([shown, shown, shown, gone, gone, gone, shown])
   }
 })
 

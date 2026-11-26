@@ -4,10 +4,9 @@ import type { Register } from 'claude-code'
 // The taxi_horse line, drawn by the session itself on a row of its own under
 // the input box.
 //
-// meter.py counts the tokens. Once a second, every AWAY_ASK_MS in a window
-// without the focus, this mod runs "taxi-horse --state" with the session id
-// and the transcript path, and gets back "<state> <level>" and, when the
-// animal has a mark, "gust", "fire" or "home".
+// meter.py counts the tokens. Once a second this mod runs "taxi-horse --state"
+// with the session id and the transcript path, and gets back "<state> <level>"
+// and, when the animal has a mark, "gust", "fire" or "home".
 // The session names its transcript. A build older than $.session.info() does
 // not: there the path is the one the last classic hook event of the main loop
 // carried for this session, and before the first one the meter answers from
@@ -30,10 +29,10 @@ import type { Register } from 'claude-code'
 // know: whether its window has the focus, and whether the viewer asked for
 // less motion. Every redraw of a session's row makes the terminal's window
 // redraw, and the desktop with it, so a window without the focus is redrawn
-// once a second at most, and only while its session works: there the animal
-// runs a column a second, the wrench and the hourglass blink, and the zzz
-// stands still, with no poof. With less motion asked for the animal runs a
-// column a second, and nothing blinks or poofs.
+// AWAY_SPAN times less often: the animal runs as fast, AWAY_SPAN columns a
+// redraw, and what blinks is there and gone AWAY_SPAN times as long. With
+// less motion asked for the animal runs a column a second, and nothing blinks
+// or poofs.
 //
 // The picture is meter.py's render(): keep the two the same. Two things are
 // this mod's alone. When the animal changes into another, or wakes up, a poof
@@ -48,7 +47,8 @@ import type { Register } from 'claude-code'
 // of this mod that a reload has just loaded reads it there.
 //
 // The wrench of a standing animal, the hourglass and every zzz blink:
-// BLINK_MS there, BLINK_MS gone.
+// BLINK_MS there, BLINK_MS gone, and AWAY_SPAN times as long each in a window
+// without the focus.
 //
 // Going home starts the line over, as in a new session: the house stands at
 // the right end and every coin is back. The fares count on.
@@ -95,15 +95,13 @@ const POOF_MS = 400
 // The shortest wait between two redraws.
 const MIN_WAIT_MS = 20
 const POLL_MS = 1000
-// How often the meter is asked in a window without the focus: each answer is
-// a Python started, and there the line changes once a second at most anyway.
-// The sign of life is still written every POLL_MS, as the freshness of a sign
-// (TWIN_FRESH_MS here, MOD_FRESH in meter.py) is counted from it.
-const AWAY_ASK_MS = 3000
 const IDLE_MS = 1000
 // How long the wrench, the hourglass or a zzz is there, and how long it is
 // gone, as it blinks.
 const BLINK_MS = 1000
+// How many times less often the line is redrawn in a window without the focus.
+// Two columns are the width of one glyph.
+const AWAY_SPAN = 2
 // How long a sign of life of another copy of this mod counts for.
 const TWIN_FRESH_MS = 2500
 // Where Python may be, in the order tried. The system's comes first: it has no
@@ -146,10 +144,8 @@ export type Sight = { isFocused: boolean; isMotionReduced: boolean }
 // How much the picture may move. full: as it always has. less: the viewer
 // asked for less motion, so the animal runs a column a second, and nothing
 // blinks or poofs. away: the window has not the focus, so the line is redrawn
-// once a second at most, and only while the session works: the animal runs a
-// column a second, the wrench and the hourglass blink, and the zzz stands
-// still, with no poof. It still moves: one that stood still would look as if
-// nothing were going on.
+// AWAY_SPAN times less often. The animal runs as fast as in full, AWAY_SPAN
+// columns a redraw, and what blinks is there and gone AWAY_SPAN times as long.
 export type Motion = 'full' | 'less' | 'away'
 
 // What the row posted, when it is a Sight: it came from code, so it is read,
@@ -177,17 +173,14 @@ export function motionOf(sight: Sight | undefined): Motion {
 }
 
 // Does what stands behind the animal blink in this state, with this motion:
-// all of it with full motion, none with less, and away only the signs of
-// work, the wrench and the hourglass.
+// all of it, but none with less motion.
 function blinks(phase: Phase, motion: Motion): boolean {
-  switch (motion) {
-    case 'full':
-      return phase !== 'run'
-    case 'less':
-      return false
-    case 'away':
-      return phase === 'halt' || phase === 'wait'
-  }
+  return motion !== 'less' && phase !== 'run'
+}
+
+// How long what blinks is there, and how long it is gone, with this motion.
+function blinkMs(motion: Motion): number {
+  return motion === 'away' ? BLINK_MS * AWAY_SPAN : BLINK_MS
 }
 
 export function animal(level: number): string {
@@ -345,9 +338,9 @@ export function homeFares(fares: Fares): Fares {
 }
 
 // Is what blinks behind the animal, its wrench, its hourglass or its zzz,
-// there at this time, or gone.
-export function blinkShows(now: number): boolean {
-  return Math.floor(now / BLINK_MS) % 2 === 0
+// there at this time, or gone, when it blinks every ms.
+export function blinkShows(now: number, ms: number = BLINK_MS): boolean {
+  return Math.floor(now / ms) % 2 === 0
 }
 
 // What stands right behind the animal: asleep its zzz, waiting its hourglass,
@@ -451,18 +444,18 @@ export const NEW_PICTURE: Picture = {
 }
 
 // The time a running animal takes over a column: a second divided by its
-// speed level, at least 1. With less motion, and away, a second.
+// speed level, at least 1. With less motion, a second.
 export function stepMs(level: number, motion: Motion): number {
-  return motion === 'full' ? Math.round(1000 / Math.max(1, level)) : 1000
+  return motion === 'less' ? 1000 : Math.round(1000 / Math.max(1, level))
 }
 
-// The pace after one more step: the step time of the speed level, reached by
-// halves from the pace before it, so that a new level, or the window's focus
-// coming back, speeds the animal up or slows it down over a few steps rather
-// than at once. A first step, and one with less motion or away, takes the
-// step time as it is.
+// The pace after one more column: the step time of the speed level, reached
+// by halves from the pace before it, so that a new level, or less motion
+// turned off, speeds the animal up or slows it down over a few columns rather
+// than at once. A first column, and one with less motion, takes the step time
+// as it is.
 export function paceAfter(pace: number | undefined, target: number, motion: Motion): number {
-  if (pace === undefined || motion !== 'full' || Math.abs(target - pace) < 1) {
+  if (pace === undefined || motion === 'less' || Math.abs(target - pace) < 1) {
     return target
   }
 
@@ -474,10 +467,12 @@ export function paceAfter(pace: number | undefined, target: number, motion: Moti
 // has cost so far, undefined when the engine does not say. motion: how much
 // the picture may move (see Motion).
 //
-// A running animal moves one column a redraw, at its pace. The steps keep an
-// even beat: one that comes late shortens the wait for the next, unless it
-// came later than a whole step. A redraw that comes early, for a poof, moves
-// nothing. The wrench, the hourglass and a zzz are redrawn as they come and go.
+// A running animal moves a step a redraw, at its pace: one column, and away
+// AWAY_SPAN columns in AWAY_SPAN times as long. The steps keep an even beat:
+// one that comes late shortens the wait for the next, unless it came later
+// than a whole step. Back in the focus the next step comes within a column's
+// time. A redraw that comes early, for a poof, moves nothing. The wrench, the
+// hourglass and a zzz are redrawn as they come and go.
 export function frame(
   picture: Picture,
   live: Live,
@@ -488,7 +483,7 @@ export function frame(
 ): { picture: Picture; line: string; wait: number } {
   const { level, mark } = live
   const phase = drawnPhase(live.phase, isWaiting)
-  const isFull = motion === 'full'
+  const hasPoof = motion !== 'less'
   let { dist, stepAt, pace, poofUntil, fares } = picture
   if (mark === 'home') {
     dist = 0
@@ -499,29 +494,38 @@ export function frame(
     // A pace is the run's: the next run starts at its own.
     pace = undefined
   } else {
+    if (motion === 'full' && pace !== undefined) {
+      // Back in the focus after a step away.
+      stepAt = Math.min(stepAt, now + pace)
+    }
     if (now >= stepAt - MIN_WAIT_MS) {
-      const before = animalColumn(dist)
-      dist += 1
-      fares = stamped(fares, before, animalColumn(dist), usd)
-      pace = paceAfter(pace, stepMs(level, motion), motion)
-      stepAt = stepAt + pace > now ? stepAt + pace : now + pace
+      let took = 0
+      for (let k = 0; k < (motion === 'away' ? AWAY_SPAN : 1); k += 1) {
+        const before = animalColumn(dist)
+        dist += 1
+        fares = stamped(fares, before, animalColumn(dist), usd)
+        pace = paceAfter(pace, stepMs(level, motion), motion)
+        took += pace
+      }
+      stepAt = stepAt + took > now ? stepAt + took : now + took
     }
     wait = stepAt - now
   }
-  if (isFull && poofs(picture.drawn, phase, level, mark)) {
+  if (hasPoof && poofs(picture.drawn, phase, level, mark)) {
     poofUntil = now + POOF_MS
   }
-  // Falling asleep cuts a poof short, and so does less motion or away.
-  const isChanging = isFull && !isAsleep(phase, mark) && now < poofUntil
+  // Falling asleep cuts a poof short, and so does less motion.
+  const isChanging = hasPoof && !isAsleep(phase, mark) && now < poofUntil
   if (isChanging) {
     wait = Math.min(wait, poofUntil - now)
   }
   // What does not blink stands still, there.
   const isBlinking = blinks(phase, motion)
+  const blink = blinkMs(motion)
   if (isBlinking) {
-    wait = Math.min(wait, BLINK_MS - (now % BLINK_MS))
+    wait = Math.min(wait, blink - (now % blink))
   }
-  const hasBlink = isBlinking ? blinkShows(now) : true
+  const hasBlink = isBlinking ? blinkShows(now, blink) : true
   const line = render(phase, level, dist, mark, TRACK, isChanging, fares.stamps, hasBlink)
 
   return {
@@ -804,18 +808,13 @@ export const register: Register = on => {
       }
     }
 
-    // isMeterDue: whether to ask the meter this time, or only to leave the
-    // sign of life and keep drawing what it said last.
-    const poll = async (now: number, isMeterDue: boolean): Promise<void> => {
+    const poll = async (now: number): Promise<void> => {
       try {
         const session = await $.session.id()
         if (signs !== undefined && (await standsBack(`${signs}/${session}.mod`, now))) {
           live = undefined
           problem = undefined
 
-          return
-        }
-        if (!isMeterDue && live !== undefined) {
           return
         }
         if (python === undefined) {
@@ -905,20 +904,11 @@ export const register: Register = on => {
       void tick(beat)
     }
 
-    // The meter is asked once a second beside the redraws, and every
-    // AWAY_ASK_MS in a window without the focus: none of the redraws waits for
-    // its answer, which is drawn as it comes. Back in the focus it is asked
-    // within a second.
-    let askedAt = -Infinity
+    // The meter is asked once a second beside the redraws: none of them waits
+    // for its answer. The answer is drawn as it comes.
     const ask = async (): Promise<void> => {
       try {
-        const now = await $.clock.now()
-        const every = motionOf(sight) === 'away' ? AWAY_ASK_MS : POLL_MS
-        const isMeterDue = now - askedAt >= every - MIN_WAIT_MS
-        if (isMeterDue) {
-          askedAt = now
-        }
-        await poll(now, isMeterDue)
+        await poll(await $.clock.now())
         redrawNow()
       } finally {
         $.clock.after(POLL_MS, () => void ask())
