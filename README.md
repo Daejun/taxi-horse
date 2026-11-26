@@ -47,11 +47,22 @@ running under the input box.
 - When the animal changes into another, or wakes up, a poof (`💥`) stands
   in its place for a moment. Falling asleep and going home have none.
 - The faster it runs, the more often it is redrawn, one column at a time.
+- In a terminal window that does not have the focus the line is redrawn
+  once a second at most, and only while its session works: the animal runs
+  a column a second, the wrench and the hourglass blink, and the zzz stands
+  still, with no poof. Each redraw of the line makes the terminal's window
+  redraw, and the desktop with it, so a dozen sessions in a dozen windows
+  would keep the desktop busy. When the focus comes back the animal speeds
+  up to its own pace over a few steps. This takes Claude Code 2.1.331 or
+  newer and a terminal that reports its focus; anywhere else the line moves
+  as in a window that has it.
+- With `"prefersReducedMotion": true` in Claude Code's settings the animal
+  runs a column a second, and nothing blinks or poofs.
 - The fare is the only text on the line.
 
-The plugin is a mod (`hooks/register.tsx`) that draws the line and a script
-(`taxi-horse`, `meter.py`) that counts the tokens. The mod runs the script
-once a second.
+The plugin is a mod (`hooks/register.tsx`, which draws the line through
+`hooks/row.tsx`) and a script (`taxi-horse`, `meter.py`) that counts the
+tokens. The mod runs the script once a second.
 
 ## Install
 

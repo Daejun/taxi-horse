@@ -14,6 +14,7 @@ import {
   homeFares,
   isWindows,
   lastLine,
+  motionOf,
   NEW_PICTURE,
   parseLive,
   parseProbe,
@@ -21,12 +22,13 @@ import {
   pythonsFor,
   render,
   seenIn,
+  sightOf,
   signDir,
   stamped,
   transcriptFor,
   waits,
 } from './register'
-import type { Fares, Live, Picture, Run } from './register'
+import type { Fares, Live, Motion, Picture, Run } from './register'
 import { COLUMNS, CREPT, FARES, LEFT, LINES, MARKED, NEXT_LAP, STAMPED, STAMPS, WALKED } from './pictures'
 
 test('draws the line meter.py draws', async () => {
@@ -550,4 +552,98 @@ test('stamps the coins as it runs, as meter.py does, and starts the line over at
   expect([home.picture.dist, home.picture.fares.stamps.size]).toEqual([0, 0])
   expect(home.picture.fares.billed).toBe(picture.fares.billed)
   expect(home.line).toBe(render('vacant', 0, 0, 'home', 48, false, new Map(), blinkShows(now)))
+})
+
+test('keeps an even beat: a step that comes late shortens the wait for the next', async () => {
+  const run4: Live = { phase: 'run', level: 4, mark: '' }
+  let redraw = frame(NEW_PICTURE, run4, undefined, false, 10_000)
+  expect(redraw.wait).toBe(250)
+  // Each redraw 15 ms late: the steps stay on the beat of 10 000 + 250 k.
+  for (let k = 1; k <= 8; k += 1) {
+    redraw = frame(redraw.picture, run4, undefined, false, 10_000 + 250 * k + 15)
+    expect([redraw.picture.dist, redraw.wait]).toEqual([k + 1, 235])
+  }
+  // Later than a whole step: the beat starts again from then, and no step is
+  // made up.
+  const late = frame(redraw.picture, run4, undefined, false, 10_000 + 250 * 9 + 400)
+  expect([late.picture.dist, late.wait]).toEqual([10, 250])
+})
+
+test('takes a new speed level over a few steps, and starts a run at its own', async () => {
+  let redraw = frame(NEW_PICTURE, { phase: 'run', level: 4, mark: '' }, undefined, false, 10_000)
+  const paces: (number | undefined)[] = []
+  let now = 0
+  for (let k = 0; k < 9; k += 1) {
+    // On the beat. The redraws for the poof of the new animal move nothing.
+    now = redraw.picture.stepAt
+    redraw = frame(redraw.picture, { phase: 'run', level: 12, mark: '' }, undefined, false, now)
+    paces.push(redraw.picture.pace)
+  }
+  // Halfway to 83 ms each step, and there within a few.
+  expect(paces).toEqual([166.5, 124.75, 103.875, 93.4375, 88.21875, 85.609375, 84.3046875, 83.65234375, 83])
+  expect(redraw.picture.dist).toBe(10)
+  // A run after a sleep starts at its own pace.
+  const asleep = frame(redraw.picture, ASLEEP, undefined, false, now + 5_000)
+  expect(asleep.picture.pace).toBeUndefined()
+  expect(frame(asleep.picture, { phase: 'run', level: 4, mark: '' }, undefined, false, now + 6_000).wait).toBe(250)
+})
+
+test('away from the focus runs a column a second, and only the signs of work blink', async () => {
+  // A level 16 animal runs a column a second, on the beat, with no poof.
+  const asleep = frame(NEW_PICTURE, ASLEEP, undefined, false, 10_000, 'away')
+  let redraw = frame(asleep.picture, { phase: 'run', level: 16, mark: 'fire' }, undefined, false, 10_500, 'away')
+  expect([redraw.picture.dist, redraw.wait, redraw.line]).toEqual([1, 1000, render('run', 16, 1, 'fire')])
+  for (let dist = 2; dist <= 4; dist += 1) {
+    redraw = frame(redraw.picture, { phase: 'run', level: 16, mark: 'fire' }, undefined, false, redraw.picture.stepAt, 'away')
+    expect([redraw.picture.dist, redraw.wait]).toEqual([dist, 1000])
+  }
+  // Back in the focus it speeds up to its own pace over a few steps.
+  const waits: number[] = []
+  for (let k = 0; k < 10; k += 1) {
+    redraw = frame(redraw.picture, { phase: 'run', level: 16, mark: 'fire' }, undefined, false, redraw.picture.stepAt)
+    waits.push(redraw.wait)
+  }
+  expect(waits).toEqual([532, 297, 180, 122, 92, 78, 70, 67, 65, 64])
+  // The wrench and the hourglass blink; the zzz stands still, there.
+  const halt: Live = { phase: 'halt', level: 7, mark: '' }
+  expect(frame(NEW_PICTURE, halt, undefined, false, 10_250, 'away')).toMatchObject({ line: render('halt', 7, 0), wait: 750 })
+  expect(frame(NEW_PICTURE, halt, undefined, false, 11_000, 'away').line).toBe(render('halt', 7, 0, '', 48, false, new Map(), false))
+  expect(frame(NEW_PICTURE, ASLEEP, undefined, true, 11_000, 'away').line).toBe(render('wait', 0, 0, '', 48, false, new Map(), false))
+  for (const now of [10_250, 11_000]) {
+    expect(frame(NEW_PICTURE, ASLEEP, undefined, false, now, 'away')).toMatchObject({ line: render('vacant', 0, 0), wait: 1000 })
+  }
+})
+
+test('with less motion runs a column a second, and nothing blinks or poofs', async () => {
+  let picture: Picture = frame(NEW_PICTURE, ASLEEP, undefined, false, 10_000, 'less').picture
+  let now = 10_500
+  for (let dist = 1; dist <= 4; dist += 1) {
+    const redraw = frame(picture, { phase: 'run', level: 16, mark: 'gust' }, undefined, false, now, 'less')
+    expect([redraw.picture.dist, redraw.wait, redraw.line]).toEqual([dist, 1000, render('run', 16, dist, 'gust')])
+    picture = redraw.picture
+    now += redraw.wait
+  }
+  for (const at of [11_000, 12_000]) {
+    expect(frame(NEW_PICTURE, { phase: 'halt', level: 3, mark: '' }, undefined, false, at, 'less').line).toBe(
+      render('halt', 3, 0),
+    )
+  }
+})
+
+test('reads what the row says of its window, and nothing else', async () => {
+  expect(sightOf({ isFocused: false, isMotionReduced: false })).toEqual({ isFocused: false, isMotionReduced: false })
+  expect(sightOf({ isFocused: true, isMotionReduced: true, extra: 1 })).toEqual({ isFocused: true, isMotionReduced: true })
+  for (const data of [undefined, null, 'focused', [true, false], { isFocused: 1, isMotionReduced: false }, { isFocused: true }]) {
+    expect(sightOf(data)).toBeUndefined()
+  }
+  const cases: readonly (readonly [Parameters<typeof motionOf>[0], Motion])[] = [
+    [undefined, 'full'],
+    [{ isFocused: true, isMotionReduced: false }, 'full'],
+    [{ isFocused: true, isMotionReduced: true }, 'less'],
+    [{ isFocused: false, isMotionReduced: false }, 'away'],
+    [{ isFocused: false, isMotionReduced: true }, 'less'],
+  ]
+  for (const [sight, motion] of cases) {
+    expect(motionOf(sight)).toBe(motion)
+  }
 })

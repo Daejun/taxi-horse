@@ -17,11 +17,22 @@ import type { Register } from 'claude-code'
 // Between two answers it only moves the animal: one column a redraw, and as
 // many redraws a second as the speed level, so the animal never jumps. A
 // statusLine command could not do that: its row is redrawn once a second at
-// most.
+// most. The meter is asked beside the redraws, not in their way, and the steps
+// keep an even beat: one that comes late shortens the wait for the next. A
+// change of speed level takes the animal to its new pace over a few steps.
 //
 // The row is this mod's tree at the hint line. The terminal draws it under the
 // permission-mode line, which no mod can draw above. $.ui.status would pin the
 // line as a notice instead, which the terminal marks with a "!".
+//
+// The row is drawn by row.tsx, a Client, which says what the hooks cannot
+// know: whether its window has the focus, and whether the viewer asked for
+// less motion. Every redraw of a session's row makes the terminal's window
+// redraw, and the desktop with it, so a window without the focus is redrawn
+// once a second at most, and only while its session works: there the animal
+// runs a column a second, the wrench and the hourglass blink, and the zzz
+// stands still, with no poof. With less motion asked for the animal runs a
+// column a second, and nothing blinks or poofs.
 //
 // The picture is meter.py's render(): keep the two the same. Two things are
 // this mod's alone. When the animal changes into another, or wakes up, a poof
@@ -105,6 +116,8 @@ const PROBE = 'import sys; print(sys.version_info[0], sys.version_info[1], sys.e
 const RETRY_MS = 30000
 // How many answers in a row may be missing before the row says so.
 const FAILURES_SHOWN = 3
+// The key of the row's Client.
+const ROW = 'taxi-horse'
 
 // What the meter says, and "wait": between turns, with something to wait for.
 export type Phase = 'run' | 'halt' | 'vacant' | 'wait'
@@ -117,6 +130,57 @@ export type Mark = '' | keyof typeof BEHIND | 'home'
 
 // What the meter says: the state, the speed level and the mark.
 export type Live = { phase: Phase; level: number; mark: Mark }
+
+// What row.tsx says of where the row is drawn: whether its window has the
+// focus, and whether the viewer asked for less motion.
+export type Sight = { isFocused: boolean; isMotionReduced: boolean }
+
+// How much the picture may move. full: as it always has. less: the viewer
+// asked for less motion, so the animal runs a column a second, and nothing
+// blinks or poofs. away: the window has not the focus, so the line is redrawn
+// once a second at most, and only while the session works: the animal runs a
+// column a second, the wrench and the hourglass blink, and the zzz stands
+// still, with no poof. It still moves: one that stood still would look as if
+// nothing were going on.
+export type Motion = 'full' | 'less' | 'away'
+
+// What the row posted, when it is a Sight: it came from code, so it is read,
+// not trusted.
+export function sightOf(data: unknown): Sight | undefined {
+  if (typeof data !== 'object' || data === null) {
+    return undefined
+  }
+  const { isFocused, isMotionReduced } = data as Record<string, unknown>
+  if (typeof isFocused !== 'boolean' || typeof isMotionReduced !== 'boolean') {
+    return undefined
+  }
+
+  return { isFocused, isMotionReduced }
+}
+
+// The motion for what the row last said: full before it has said anything,
+// and where it cannot.
+export function motionOf(sight: Sight | undefined): Motion {
+  if (sight === undefined) {
+    return 'full'
+  }
+
+  return sight.isMotionReduced ? 'less' : sight.isFocused ? 'full' : 'away'
+}
+
+// Does what stands behind the animal blink in this state, with this motion:
+// all of it with full motion, none with less, and away only the signs of
+// work, the wrench and the hourglass.
+function blinks(phase: Phase, motion: Motion): boolean {
+  switch (motion) {
+    case 'full':
+      return phase !== 'run'
+    case 'less':
+      return false
+    case 'away':
+      return phase === 'halt' || phase === 'wait'
+  }
+}
 
 export function animal(level: number): string {
   const index = Math.min(ANIMALS.length - 1, Math.max(0, Math.floor(level)))
@@ -357,11 +421,13 @@ export function render(
 }
 
 // The picture between two answers of the meter: how far the animal has run,
-// when it may move its next column, the state last drawn and until when the
-// poof of its change stays, and what it has left in the place of the coins.
+// when it may move its next column and how long it takes over one now, the
+// state last drawn and until when the poof of its change stays, and what it
+// has left in the place of the coins.
 export type Picture = {
   dist: number
   stepAt: number
+  pace: number | undefined
   drawn: Live | undefined
   poofUntil: number
   fares: Fares
@@ -370,59 +436,90 @@ export type Picture = {
 export const NEW_PICTURE: Picture = {
   dist: 0,
   stepAt: 0,
+  pace: undefined,
   drawn: undefined,
   poofUntil: 0,
   fares: { stamps: NO_STAMPS, billed: undefined },
 }
 
+// The time a running animal takes over a column: a second divided by its
+// speed level, at least 1. With less motion, and away, a second.
+export function stepMs(level: number, motion: Motion): number {
+  return motion === 'full' ? Math.round(1000 / Math.max(1, level)) : 1000
+}
+
+// The pace after one more step: the step time of the speed level, reached by
+// halves from the pace before it, so that a new level, or the window's focus
+// coming back, speeds the animal up or slows it down over a few steps rather
+// than at once. A first step, and one with less motion or away, takes the
+// step time as it is.
+export function paceAfter(pace: number | undefined, target: number, motion: Motion): number {
+  if (pace === undefined || motion !== 'full' || Math.abs(target - pace) < 1) {
+    return target
+  }
+
+  return pace + (target - pace) / 2
+}
+
 // One redraw at time now, for what the meter said last: the picture after it,
 // the line, and how long to wait for the next redraw. usd is what the session
-// has cost so far, undefined when the engine does not say.
+// has cost so far, undefined when the engine does not say. motion: how much
+// the picture may move (see Motion).
 //
-// A running animal moves one column a redraw, and as many redraws a second as
-// its speed level. A redraw that comes early, for a poof, moves nothing. The
-// wrench, the hourglass and a zzz are redrawn as they come and go.
+// A running animal moves one column a redraw, at its pace. The steps keep an
+// even beat: one that comes late shortens the wait for the next, unless it
+// came later than a whole step. A redraw that comes early, for a poof, moves
+// nothing. The wrench, the hourglass and a zzz are redrawn as they come and go.
 export function frame(
   picture: Picture,
   live: Live,
   usd: number | undefined,
   isWaiting: boolean,
   now: number,
+  motion: Motion = 'full',
 ): { picture: Picture; line: string; wait: number } {
   const { level, mark } = live
   const phase = drawnPhase(live.phase, isWaiting)
-  let { dist, stepAt, poofUntil, fares } = picture
+  const isFull = motion === 'full'
+  let { dist, stepAt, pace, poofUntil, fares } = picture
   if (mark === 'home') {
     dist = 0
     fares = homeFares(fares)
   }
   let wait = IDLE_MS
-  if (phase === 'run') {
+  if (phase !== 'run') {
+    // A pace is the run's: the next run starts at its own.
+    pace = undefined
+  } else {
     if (now >= stepAt - MIN_WAIT_MS) {
       const before = animalColumn(dist)
       dist += 1
       fares = stamped(fares, before, animalColumn(dist), usd)
-      stepAt = now + Math.round(1000 / Math.max(1, level))
+      pace = paceAfter(pace, stepMs(level, motion), motion)
+      stepAt = stepAt + pace > now ? stepAt + pace : now + pace
     }
     wait = stepAt - now
   }
-  if (poofs(picture.drawn, phase, level, mark)) {
+  if (isFull && poofs(picture.drawn, phase, level, mark)) {
     poofUntil = now + POOF_MS
   }
-  // Falling asleep cuts a poof short.
-  const isChanging = !isAsleep(phase, mark) && now < poofUntil
+  // Falling asleep cuts a poof short, and so does less motion or away.
+  const isChanging = isFull && !isAsleep(phase, mark) && now < poofUntil
   if (isChanging) {
     wait = Math.min(wait, poofUntil - now)
   }
-  if (phase !== 'run') {
+  // What does not blink stands still, there.
+  const isBlinking = blinks(phase, motion)
+  if (isBlinking) {
     wait = Math.min(wait, BLINK_MS - (now % BLINK_MS))
   }
-  const line = render(phase, level, dist, mark, TRACK, isChanging, fares.stamps, blinkShows(now))
+  const hasBlink = isBlinking ? blinkShows(now) : true
+  const line = render(phase, level, dist, mark, TRACK, isChanging, fares.stamps, hasBlink)
 
   return {
-    picture: { dist, stepAt, drawn: { phase, level, mark }, poofUntil, fares },
+    picture: { dist, stepAt, pace, drawn: { phase, level, mark }, poofUntil, fares },
     line,
-    wait: Math.max(MIN_WAIT_MS, wait),
+    wait: Math.max(MIN_WAIT_MS, Math.round(wait)),
   }
 }
 
@@ -554,6 +651,12 @@ export const register: Register = on => {
   const see = (e: Parameters<typeof seenIn>[0]): void => {
     seen = seenIn(e) ?? seen
   }
+  // What the row's Client last said of where it is drawn. Undefined until it
+  // has said it, and after it failed: the row is plain text from then on.
+  let sight: Sight | undefined
+  let isClientBroken = false
+  // A redraw now, in place of the one waited for, once the session draws.
+  let redrawNow = (): void => {}
 
   // Named one by one, not as classic.*: that would bring every tool call's
   // PreToolUse and PostToolUse here too.
@@ -583,16 +686,47 @@ export const register: Register = on => {
     return next(e)
   })
 
+  on('ui.message', async ($, e, next) => {
+    const told = e.element === ROW ? sightOf(e.data) : undefined
+    if (told !== undefined && !isClientBroken) {
+      sight = told
+      redrawNow()
+    }
+
+    return next(e)
+  })
+
+  on('ui.fault', async ($, e, next) => {
+    if (e.element === ROW && !isClientBroken) {
+      isClientBroken = true
+      sight = undefined
+      $.ui.invalidate('ui.render')
+      redrawNow()
+    }
+
+    return next(e)
+  })
+
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     const hint = await next(e)
     if (shown === undefined) {
       return hint
     }
-    const { Box, Text } = $.ui.resolve(e)
+    const elements = $.ui.resolve(e)
+    const { Box, Text } = elements
+    // A surface or a build without Client, or one whose Client failed, draws
+    // plain text.
+    const Client = 'Client' in elements ? elements.Client : undefined
+    const row =
+      Client === undefined || isClientBroken ? (
+        <Text>{shown}</Text>
+      ) : (
+        <Client key={ROW} module="./row.tsx" props={{ line: shown }} />
+      )
 
     return (
       <Box flexDirection="column">
-        <Text>{shown}</Text>
+        {row}
         {hint}
       </Box>
     )
@@ -627,7 +761,6 @@ export const register: Register = on => {
     let picture = NEW_PICTURE
     // What the session has cost so far, when the engine says.
     let usd: number | undefined
-    let polledAt = 0
     // The Python found, and what the row says when the picture cannot be drawn.
     let python: string | undefined
     let problem: string | undefined
@@ -664,7 +797,6 @@ export const register: Register = on => {
     }
 
     const poll = async (now: number): Promise<void> => {
-      polledAt = now
       try {
         const session = await $.session.id()
         if (signs !== undefined && (await standsBack(`${signs}/${session}.mod`, now))) {
@@ -727,16 +859,20 @@ export const register: Register = on => {
       }
     }
 
-    const tick = async (): Promise<void> => {
+    // The redraws, one after the other: each draws the picture of its moment
+    // and waits as long as it says. A redraw asked for meanwhile takes the
+    // place of the one waited for: beat counts them, and an older one stops.
+    let beat = 0
+    const tick = async (mine: number): Promise<void> => {
       let wait = IDLE_MS
       try {
         const now = await $.clock.now()
-        if (now - polledAt >= POLL_MS) {
-          await poll(now)
+        if (mine !== beat) {
+          return
         }
         let line = problem
         if (live !== undefined) {
-          const redraw = frame(picture, live, usd, isWaiting, now)
+          const redraw = frame(picture, live, usd, isWaiting, now, motionOf(sight))
           picture = redraw.picture
           line = redraw.line
           wait = redraw.wait
@@ -746,11 +882,29 @@ export const register: Register = on => {
           $.ui.invalidate('ui.render')
         }
       } finally {
-        $.clock.after(wait, () => void tick())
+        if (mine === beat) {
+          $.clock.after(wait, () => void tick(mine))
+        }
+      }
+    }
+    redrawNow = () => {
+      beat += 1
+      void tick(beat)
+    }
+
+    // The meter is asked once a second beside the redraws: none of them waits
+    // for its answer. The answer is drawn as it comes.
+    const ask = async (): Promise<void> => {
+      try {
+        await poll(await $.clock.now())
+        redrawNow()
+      } finally {
+        $.clock.after(POLL_MS, () => void ask())
       }
     }
 
-    void tick()
+    redrawNow()
+    void ask()
 
     return started
   })
