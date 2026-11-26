@@ -8,7 +8,7 @@ running under the input box.
 ❯
 ────────────────────────────────────────────────
   ⏵⏵ bypass permissions on (shift+tab to cycle)
-  🪙        🪙   🐘   💲0.19    🐾        💲0.05
+  🟡        🟡   🐘   💲0.19    🐾        💲0.05
 ```
 
 - The animal runs right to left while a request is out. While only tools
@@ -136,8 +136,9 @@ TAXI=$(ls -dt ~/.claude/plugins/cache/taxi-horse/taxi-horse/*/taxi-horse | head 
 ```
 
 If a coin or an animal shows as an empty box, the terminal has no colour
-emoji font with Unicode 13 (the coin is U+1FA99). Say so and go on: the
-install is the same.
+emoji font with Emoji 12.0 (the coin, U+1F7E1, is the newest on the line).
+Windows 10 has it from the May 2019 Update. Say so and go on: the install
+is the same.
 
 Sessions started after this show the line. A session that was already open
 shows it after `/reload-plugins`, typed by the user at its prompt, or after

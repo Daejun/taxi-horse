@@ -270,15 +270,15 @@ test('draws the fare behind a dollar sign as meter.py does', async () => {
   // A fare that does not fit is left out with its dollar sign. An amount
   // under half a cent leaves paw prints. An eaten coin without a stamp leaves
   // nothing.
-  expect(render('run', 7, 31, '', 48, false, new Map([[40, 100000], [30, 99999]]))).toBe('🪙        🪙   🐘             💲99999')
-  expect(render('run', 7, 31, '', 48, false, new Map([[30, 0.75]]))).toBe('🪙        🪙   🐘             💲0.75')
-  expect(render('run', 7, 31, '', 48, false, new Map([[40, 0], [30, 0.004], [20, 0.05]]))).toBe('🪙        🪙   🐘   💲0.05    🐾        🐾')
-  expect(render('run', 7, 31, '', 48, false, new Map([[40, 0]]))).toBe('🪙        🪙   🐘                       🐾')
-  expect(render('run', 7, 31)).toBe('🪙        🪙   🐘')
+  expect(render('run', 7, 31, '', 48, false, new Map([[40, 100000], [30, 99999]]))).toBe('🟡        🟡   🐘             💲99999')
+  expect(render('run', 7, 31, '', 48, false, new Map([[30, 0.75]]))).toBe('🟡        🟡   🐘             💲0.75')
+  expect(render('run', 7, 31, '', 48, false, new Map([[40, 0], [30, 0.004], [20, 0.05]]))).toBe('🟡        🟡   🐘   💲0.05    🐾        🐾')
+  expect(render('run', 7, 31, '', 48, false, new Map([[40, 0]]))).toBe('🟡        🟡   🐘                       🐾')
+  expect(render('run', 7, 31)).toBe('🟡        🟡   🐘')
   // A track of 15 columns has three columns behind its last coin, at column 10.
-  expect(render('run', 7, 9, '', 15, false, new Map([[10, 0.05]]))).toBe('🪙  🐘')
-  expect(render('run', 7, 9, '', 15, false, new Map([[10, 0]]))).toBe('🪙  🐘    🐾')
-  expect(render('run', 7, 9, '', 16, false, new Map([[10, 0.05]]))).toBe('🪙   🐘   💲0.05')
+  expect(render('run', 7, 9, '', 15, false, new Map([[10, 0.05]]))).toBe('🟡  🐘')
+  expect(render('run', 7, 9, '', 15, false, new Map([[10, 0]]))).toBe('🟡  🐘    🐾')
+  expect(render('run', 7, 9, '', 16, false, new Map([[10, 0.05]]))).toBe('🟡   🐘   💲0.05')
   for (let dist = 0; dist < 100; dist += 1) {
     const eaten = [10, 20, 30, 40].filter(c => c >= animalColumn(dist))
     for (const mark of ['', 'gust'] as const) {
@@ -303,7 +303,7 @@ test('turns the lap before back into coins one coin at a time, as meter.py does'
   }
   // The lap starts: only the coin ahead of the animal is back.
   expect(render('run', 7, 45, '', 48, false, LEFT)).toBe('🐘        💲1.20    💲0.19    🐾        💲0.05')
-  expect(render('run', 7, 46, '', 48, false, LEFT)).toBe('💲0.03    💲1.20    💲0.19    🐾        🪙    🐘')
+  expect(render('run', 7, 46, '', 48, false, LEFT)).toBe('💲0.03    💲1.20    💲0.19    🐾        🟡    🐘')
   // Each of the others comes back when the animal is a coin and a half away:
   // halfway between two coins, so not as it eats one.
   for (const [mark, dist] of [['🐾', 47], ['💲0.19', 57], ['💲1.20', 67], ['💲0.03', 77]] as const) {
@@ -395,7 +395,7 @@ test('starts the line over at home, and the fares count on', async () => {
   expect(ran.fares.billed).toBe(2.16)
   const home = homeFares(ran.fares)
   // The picture a new session starts with, as meter.py draws it.
-  expect(render('vacant', 0, 0, 'home', 48, false, home.stamps)).toBe('🪙        🪙        🪙        🪙        🪙    🏠💤')
+  expect(render('vacant', 0, 0, 'home', 48, false, home.stamps)).toBe('🟡        🟡        🟡        🟡        🟡    🏠💤')
   // What was spent since the last fare is not lost: it goes into the next one.
   expect(home.billed).toBe(ran.fares.billed)
   const next = stamped(home, animalColumn(5), animalColumn(6), 3)
@@ -447,9 +447,9 @@ test('blinks the wrench and every zzz and leaves their place empty meanwhile', a
     }
   }
   // As meter.py draws it, with blink=False.
-  expect(render('vacant', 7, 11, '', 48, false, new Map(), false)).toBe('🪙        🪙        🪙        🪙   🐌')
-  expect(render('halt', 7, 11, '', 48, false, new Map(), false)).toBe('🪙        🪙        🪙        🪙   🐘')
-  expect(render('vacant', 7, 11, 'home', 48, false, new Map(), false)).toBe('🪙        🪙        🪙        🪙   🏠')
+  expect(render('vacant', 7, 11, '', 48, false, new Map(), false)).toBe('🟡        🟡        🟡        🟡   🐌')
+  expect(render('halt', 7, 11, '', 48, false, new Map(), false)).toBe('🟡        🟡        🟡        🟡   🐘')
+  expect(render('vacant', 7, 11, 'home', 48, false, new Map(), false)).toBe('🟡        🟡        🟡        🟡   🏠')
 })
 
 test('draws an hourglass in place of the zzz while the session waits', async () => {

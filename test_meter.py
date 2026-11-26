@@ -601,8 +601,8 @@ class MeterTest(unittest.TestCase):
             for ph, mark in ((RUN, ""), (RUN, meter.GUST), (RUN, meter.FIRE)):
                 self.assertEqual(self.paid(ph, 7, float(d), mark=mark, blink=False), self.paid(ph, 7, float(d), mark=mark),
                                  "the wind and the fire of a running animal stay")
-        self.assertEqual(self.plain(VACANT, 7, 11.0, blink=False), "🪙        🪙        🪙        🪙   🐌")
-        self.assertEqual(self.plain(HALT, 7, 11.0, blink=False), "🪙        🪙        🪙        🪙   🐘")
+        self.assertEqual(self.plain(VACANT, 7, 11.0, blink=False), "🟡        🟡        🟡        🟡   🐌")
+        self.assertEqual(self.plain(HALT, 7, 11.0, blink=False), "🟡        🟡        🟡        🟡   🐘")
 
     def test_lap_before_turns_back_into_coins_one_coin_at_a_time(self):
         A, B, C, D = self.A, self.B, self.C, self.D
@@ -610,22 +610,22 @@ class MeterTest(unittest.TestCase):
         left = {A: 0.05, B: 0.002, C: 0.19, D: 1.2, 0: 0.03}
         self.assertEqual(self.plain(RUN, 7, lap - 1.0, stamps=left), "🐘        💲1.20    💲0.19    🐾        💲0.05")
         # The lap starts: only the coin ahead of the animal is back.
-        self.assertEqual(self.plain(RUN, 7, float(lap), stamps=left), "💲0.03    💲1.20    💲0.19    🐾        🪙    🐘")
+        self.assertEqual(self.plain(RUN, 7, float(lap), stamps=left), "💲0.03    💲1.20    💲0.19    🐾        🟡    🐘")
         # Each of the others comes back when the animal is a coin and a half away:
         # halfway between two coins, so not as it eats one.
         self.assertEqual(meter.REFILL, 15)
-        self.assertEqual(self.plain(RUN, 7, lap + self.reach(B + meter.REFILL + 1), stamps=left), "💲0.03    💲1.20    💲0.19    🐾        🪙    🐘")
-        self.assertEqual(self.plain(RUN, 7, lap + self.reach(B + meter.REFILL), stamps=left), "💲0.03    💲1.20    💲0.19    🪙        🪙   🐘")
-        self.assertEqual(self.plain(RUN, 7, lap + self.reach(A), stamps={B: 0.002, C: 0.19, D: 1.2, 0: 0.03}), "💲0.03    💲1.20    💲0.19    🪙        🐘",
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(B + meter.REFILL + 1), stamps=left), "💲0.03    💲1.20    💲0.19    🐾        🟡    🐘")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(B + meter.REFILL), stamps=left), "💲0.03    💲1.20    💲0.19    🟡        🟡   🐘")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(A), stamps={B: 0.002, C: 0.19, D: 1.2, 0: 0.03}), "💲0.03    💲1.20    💲0.19    🟡        🐘",
                          "the animal eats the first coin, and nothing ahead of it changes")
         self.assertEqual(self.plain(RUN, 7, lap + self.reach(A - 2), stamps={A: 0.3, B: 0.002, C: 0.19, D: 1.2, 0: 0.03}),
-                         "💲0.03    💲1.20    💲0.19    🪙      🐘💲0.30")
+                         "💲0.03    💲1.20    💲0.19    🟡      🐘💲0.30")
         self.assertEqual(self.plain(RUN, 7, lap + self.reach(C + meter.REFILL), stamps={A: 0.3, B: 0.002, C: 0.19, D: 1.2, 0: 0.03}),
-                         "💲0.03    💲1.20    🪙        🪙   🐘   💲0.30")
-        self.assertEqual(self.plain(RUN, 7, lap + self.reach(B), stamps={A: 0.3, C: 0.19, D: 1.2, 0: 0.03}), "💲0.03    💲1.20    🪙        🐘        💲0.30")
-        self.assertEqual(self.plain(RUN, 7, lap + self.reach(D), stamps={A: 0.3, B: 0.0, C: 0.0, 0: 0.03}), "🪙        🐘        🐾        🐾        💲0.30")
-        self.assertEqual(self.plain(RUN, 7, lap + self.reach(meter.REFILL), stamps={A: 0.3, B: 0.0, C: 0.0, 0: 0.03}), "🪙        🪙   🐘   🐾        🐾        💲0.30")
-        self.assertEqual(self.plain(RUN, 7, lap + self.reach(D - 2), stamps={A: 0.3, B: 0.0, C: 0.0, D: 0.0, 0: 0.03}), "🪙      🐘🐾        🐾        🐾        💲0.30",
+                         "💲0.03    💲1.20    🟡        🟡   🐘   💲0.30")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(B), stamps={A: 0.3, C: 0.19, D: 1.2, 0: 0.03}), "💲0.03    💲1.20    🟡        🐘        💲0.30")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(D), stamps={A: 0.3, B: 0.0, C: 0.0, 0: 0.03}), "🟡        🐘        🐾        🐾        💲0.30")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(meter.REFILL), stamps={A: 0.3, B: 0.0, C: 0.0, 0: 0.03}), "🟡        🟡   🐘   🐾        🐾        💲0.30")
+        self.assertEqual(self.plain(RUN, 7, lap + self.reach(D - 2), stamps={A: 0.3, B: 0.0, C: 0.0, D: 0.0, 0: 0.03}), "🟡      🐘🐾        🐾        🐾        💲0.30",
                          "the last to come back is the coin at the left end")
         # Whatever the lap before left, and whatever the animal does meanwhile.
         was = {A: meter.EATEN, B: meter.PRINTS, C: meter.EATEN, D: meter.EATEN, 0: meter.EATEN}
@@ -795,12 +795,12 @@ class MeterTest(unittest.TestCase):
         self.assertEqual([meter.fare(usd) for usd in (0, 0.0, 0.004, 0.0049)], ["", "", "", ""])
         self.assertEqual((len(meter.PRINTS), columns(meter.PRINTS)), (1, 2), "one code point, two columns, as the rest")
         self.assertEqual(self.plain(RUN, 7, at, stamps={A: 0.0, B: 0.004, C: 0.05}),
-                         "🪙        🪙   🐘   💲0.05    🐾        🐾")
+                         "🟡        🟡   🐘   💲0.05    🐾        🐾")
         self.assertEqual(self.plain(RUN, 7, at, stamps={A: 0.0, B: 0.0, C: 0.0}),
-                         "🪙        🪙   🐘   🐾        🐾        🐾")
-        self.assertEqual(self.plain(RUN, 7, at, stamps={A: 0.0}), "🪙        🪙   🐘                       🐾",
+                         "🟡        🟡   🐘   🐾        🐾        🐾")
+        self.assertEqual(self.plain(RUN, 7, at, stamps={A: 0.0}), "🟡        🟡   🐘                       🐾",
                          "an eaten coin without a stamp leaves nothing")
-        self.assertEqual(self.plain(RUN, 7, at), "🪙        🪙   🐘")
+        self.assertEqual(self.plain(RUN, 7, at), "🟡        🟡   🐘")
         # They give way to the animal and what is behind it, as a dollar sign does.
         for d in range(0, 2 * meter.lap_length(self.W)):
             for ph, mark in ((RUN, ""), (RUN, meter.GUST), (VACANT, "")):
@@ -810,7 +810,7 @@ class MeterTest(unittest.TestCase):
                 self.assertEqual(line, paid.replace(meter.EATEN + "0.05", meter.PRINTS + " " * 4).rstrip(" "), (ph, mark, d))
                 self.assertLessEqual(columns(line), max(self.W, columns(self.plain(ph, 7, float(d), mark=mark))))
         # A track of 15 columns has its last coin at column 10: three columns are left behind it.
-        self.assertEqual(meter.render(RUN, 7, 9.0, width=15, stamps={10: 0.0}), "🪙  🐘    🐾")
+        self.assertEqual(meter.render(RUN, 7, 9.0, width=15, stamps={10: 0.0}), "🟡  🐘    🐾")
 
     def test_cost_is_read_from_the_status_line_input_and_nothing_else_passes_for_one(self):
         self.assertEqual(meter.cost_of({"cost": {"total_cost_usd": 1.25}}), 1.25)
@@ -870,7 +870,7 @@ class MeterTest(unittest.TestCase):
         self.assertEqual(seen[36], ({A: meter.PRINTS, B: "0.01", C: meter.PRINTS, D: "0.01"}, 36 / 2500),
                          "0.8 cents since")
         self.assertEqual(self.plain(RUN, 7, self.reach(D - 2), stamps=stamps),
-                         "🪙      🐘💲0.01    🐾        💲0.01    🐾")
+                         "🟡      🐘💲0.01    🐾        💲0.01    🐾")
 
     def test_no_cost_no_fare_and_the_fares_count_from_the_first_reading(self):
         A, B, C = self.A, self.B, self.C
@@ -938,7 +938,7 @@ class MeterTest(unittest.TestCase):
         home = meter.measure(self.data, T0 + 24 + W, directory=self.state, rates=self.rates)
         self.assertEqual((home[0], home[6], home[4], home[7]), (VACANT, meter.HOME, 0.0, {}))
         self.assertEqual(self.plain(VACANT, 0, home[4], mark=meter.HOME, stamps=home[7]),
-                         "🪙        🪙        🪙        🪙        🪙    🏠💤")
+                         "🟡        🟡        🟡        🟡        🟡    🏠💤")
 
     def test_cost_that_starts_over_is_counted_from_there(self):
         A, B, C = self.A, self.B, self.C
@@ -1025,11 +1025,11 @@ class MeterTest(unittest.TestCase):
                 self.assertEqual(set(line) - animals - set(" 💤💨" + meter.TOOL + meter.HOUSE + meter.COIN + meter.EATEN),
                                  set("0123456789.") & set(line), line)
         self.assertEqual(self.plain(RUN, 7, self.reach(16), stamps=stamps),
-                         "💲1.50    🪙    🐘  💲1.31    💲1.12    💲1.07", "the coin ahead is a coin, the left end is of the lap before")
+                         "💲1.50    🟡    🐘  💲1.31    💲1.12    💲1.07", "the coin ahead is a coin, the left end is of the lap before")
         self.assertEqual(self.plain(RUN, 7, self.reach(15), stamps=stamps),
-                         "🪙        🪙   🐘   💲1.31    💲1.12    💲1.07", "a column on, the left end is a coin too")
+                         "🟡        🟡   🐘   💲1.31    💲1.12    💲1.07", "a column on, the left end is a coin too")
         self.assertEqual(self.plain(RUN, 7, self.reach(36), stamps=stamps),
-                         "💲1.50    💲1.40    💲1.31    🪙    🐘  💲1.07", "three of the lap before, the coin ahead, one of this lap")
+                         "💲1.50    💲1.40    💲1.31    🟡    🐘  💲1.07", "three of the lap before, the coin ahead, one of this lap")
         self.assertEqual(self.plain(RUN, 7, self.reach(15), stamps={}), self.plain(RUN, 7, self.reach(15)))
 
     def glyph_at(self, line, column):
@@ -1043,10 +1043,10 @@ class MeterTest(unittest.TestCase):
 
     def test_fare_that_does_not_fit_is_left_out_with_its_dollar_sign(self):
         self.assertEqual(self.plain(RUN, 7, self.reach(15), stamps={self.A: 100000.0, self.B: 99999.0}),
-                         "🪙        🪙   🐘             💲99999")
+                         "🟡        🟡   🐘             💲99999")
         # A track of 15 columns has its last coin at column 10: three columns are left behind it.
-        self.assertEqual(meter.render(RUN, 7, 9.0, width=15, stamps={10: 0.05}), "🪙  🐘")
-        self.assertEqual(meter.render(RUN, 7, 9.0, width=16, stamps={10: 0.05}), "🪙   🐘   💲0.05")
+        self.assertEqual(meter.render(RUN, 7, 9.0, width=15, stamps={10: 0.05}), "🟡  🐘")
+        self.assertEqual(meter.render(RUN, 7, 9.0, width=16, stamps={10: 0.05}), "🟡   🐘   💲0.05")
         for width in range(12, self.W + 1):
             for d in range(0, 2 * self.W):
                 line = meter.render(RUN, 7, float(d), width=width, stamps={c: 12.34 for c in range(10, 50, 10)})

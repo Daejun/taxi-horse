@@ -59,7 +59,9 @@ import type { Register } from 'claude-code'
 // meter.py has it only from a status line's input.
 
 const TRACK = 48
-const COIN = '🪙'
+// Every glyph on the line is from Emoji 12.0 or older: the emoji font of
+// Windows 10 stops there. A coin from Emoji 13.0 (U+1FA99) is an empty box on it.
+const COIN = '🟡'
 // What stands in an eaten coin's place, in front of its fare.
 const EATEN = '💲'
 // What stands there when the stretch has cost less than half a cent.

@@ -802,7 +802,9 @@ def advance(path, running, now, lap, usd=None, home=False):
 
 # ---------------------------------------------------------------- drawing
 
-COIN = "🪙"
+# Every glyph on the line is from Emoji 12.0 or older: the emoji font of
+# Windows 10 stops there. A coin from Emoji 13.0 (U+1FA99) is an empty box on it.
+COIN = "🟡"
 EATEN = "💲"                         # what stands in an eaten coin's place, in front of its fare
 PRINTS = "🐾"                        # what stands there when the stretch has cost less than half a cent
 # The animal for each speed level, slowest first: (lowest level, glyph). All of
